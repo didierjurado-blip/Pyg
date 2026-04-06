@@ -1,0 +1,386 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Control P&G V2</title>
+    <link rel="stylesheet" href="/styles.css?v=20260406auth1" />
+  </head>
+  <body class="auth-locked">
+    <div id="auth-screen" class="auth-screen">
+      <div class="auth-card">
+        <p class="eyebrow">Acceso seguro</p>
+        <h2 id="auth-title">Iniciar sesión</h2>
+        <p id="auth-message" class="muted">Ingresa con tu cuenta de administrador para usar la aplicación.</p>
+
+        <form id="login-form" class="stack-sm">
+          <label>Usuario
+            <input id="login-email" type="text" autocomplete="username" required />
+          </label>
+          <label>Contraseña
+            <input id="login-password" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="btn auth-submit" type="submit">Ingresar</button>
+        </form>
+
+        <form id="setup-form" class="stack-sm hidden">
+          <label>Token de configuración
+            <input id="setup-token" type="password" autocomplete="off" />
+          </label>
+          <label>Nombre visible
+            <input id="setup-display-name" type="text" autocomplete="name" placeholder="Administrador" />
+          </label>
+          <label>Usuario
+            <input id="setup-email" type="text" autocomplete="username" />
+          </label>
+          <label>Contraseña
+            <input id="setup-password" type="password" autocomplete="new-password" />
+          </label>
+          <label>Confirmar contrase&ntilde;a
+            <input id="setup-password-confirm" type="password" autocomplete="new-password" />
+          </label>
+          <button class="btn auth-submit" type="submit">Crear administrador inicial</button>
+        </form>
+      </div>
+    </div>
+
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <p class="eyebrow">Controller Financiero</p>
+          <h1>Control P&G</h1>
+          <p class="sidebar-copy">Gestión mensual local con foco en ejecución, presupuesto y seguimiento gerencial.</p>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="Navegación principal">
+          <button class="nav-link active" data-nav-view="dashboard" type="button">Dashboard</button>
+          <button class="nav-link" data-nav-view="empresas" type="button">Empresas</button>
+          <button class="nav-link" data-nav-view="ejecucion" type="button">Ejecución</button>
+          <button class="nav-link" data-nav-view="presupuesto" type="button">Presupuesto</button>
+          <button class="nav-link" data-nav-view="analisis" type="button">Análisis mensual</button>
+          <button class="nav-link" data-nav-view="historico" type="button">Histórico</button>
+          <button class="nav-link" data-nav-view="acciones" type="button">Acciones</button>
+          <button class="nav-link" data-nav-view="bitacora" type="button">Bitácora</button>
+          <button class="nav-link" data-nav-view="configuracion" type="button">Configuración</button>
+        </nav>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div class="topbar-heading">
+            <p class="eyebrow">Vista de trabajo</p>
+            <h2 id="workspace-title">Dashboard</h2>
+          </div>
+
+          <div class="topbar-context">
+            <article class="context-card">
+              <small>Empresa activa</small>
+              <strong id="topbar-company-name">Sin empresa activa</strong>
+            </article>
+
+            <article class="context-card context-card-month">
+              <small>Mes activo</small>
+              <div class="context-inline">
+                <input id="month-input" type="month" />
+                <button id="btn-refresh" class="btn" type="button">Cargar mes</button>
+              </div>
+            </article>
+
+            <article class="context-card context-card-status">
+              <small>Estado del mes</small>
+              <span id="month-status-badge" class="status-pill">Abierto</span>
+            </article>
+
+            <article class="context-card context-card-auth">
+              <small>Sesión</small>
+              <div class="context-auth">
+                <strong id="auth-user-label">Sin sesión</strong>
+                <div class="actions-inline wrap-actions">
+                  <button id="btn-logout" class="btn btn-secondary btn-small" type="button">Salir</button>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <p id="global-message" class="muted topbar-message"></p>
+        </header>
+
+        <div class="workspace-content">
+          <section class="view-panel is-active" data-app-view="dashboard">
+            <section class="panel panel-intro">
+              <div>
+                <p class="eyebrow">Resumen de control</p>
+                <h3>Visión general del mes</h3>
+                <p class="panel-copy">Consulta el estado del mes, el tablero ejecutivo y el comparativo principal sin recorrer toda la aplicación.</p>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Estado del mes</h2>
+              </div>
+              <div id="month-status-panel"></div>
+            </section>
+
+            <section class="panel">
+              <h2>Tablero ejecutivo mensual</h2>
+              <div id="executive-board"></div>
+            </section>
+
+            <section class="panel">
+              <h2>Dashboard ejecutivo del mes</h2>
+              <div id="kpi-cards" class="kpi-grid"></div>
+
+              <h3>P&G contable</h3>
+              <div id="pyg-contable"></div>
+
+              <h3>P&G gerencial</h3>
+              <div id="pyg-gerencial"></div>
+
+              <h3>Tabla de control presupuestal</h3>
+              <div id="comparison-table"></div>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="empresas">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Empresas</h2>
+                <div class="actions-inline">
+                  <button id="btn-add-company" class="btn" type="button">Nueva empresa</button>
+                  <button id="btn-delete-company" class="btn btn-danger" type="button">Eliminar empresa activa</button>
+                </div>
+              </div>
+              <div id="company-tabs" class="tabs"></div>
+              <p id="active-company-label" class="muted"></p>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="ejecucion">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Carga de ejecución real</h2>
+                <button id="btn-delete-execution" class="btn btn-danger" type="button">Borrar ejecución del mes</button>
+              </div>
+              <div class="grid-2">
+                <div>
+                  <form id="execution-upload-form" class="stack-sm">
+                    <input id="execution-file" type="file" accept=".xlsx,.xls,.csv" />
+                    <button class="btn" type="submit">Subir archivo de ejecución</button>
+                  </form>
+                  <p id="execution-active-period" class="muted period-hint"></p>
+                  <p id="execution-upload-msg" class="muted"></p>
+
+                  <form id="execution-process-form" class="stack-sm">
+                    <label>Cuenta<select name="account" required></select></label>
+                    <label>Nombre cuenta<select name="accountName" required></select></label>
+                    <label>Saldo<select name="balance"></select></label>
+                    <label>Débito<select name="debit"></select></label>
+                    <label>Crédito<select name="credit"></select></label>
+                    <button class="btn" type="submit">Procesar ejecución del mes</button>
+                  </form>
+                  <div id="execution-preview-panel"></div>
+                </div>
+                <div>
+                  <div class="table-wrap">
+                    <table id="execution-preview"></table>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="presupuesto">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Presupuesto mensual</h2>
+                <div class="actions-inline wrap-actions">
+                  <button id="btn-duplicate-budget" class="btn btn-secondary" type="button">Duplicar presupuesto previo</button>
+                  <button id="btn-delete-budget" class="btn btn-danger" type="button">Borrar presupuesto del mes</button>
+                </div>
+              </div>
+              <div class="grid-2">
+                <div>
+                  <form id="budget-upload-form" class="stack-sm">
+                    <input id="budget-file" type="file" accept=".xlsx,.xls,.csv" />
+                    <button class="btn" type="submit">Subir archivo de presupuesto</button>
+                  </form>
+                  <a id="budget-template-link" class="btn" href="#">Descargar plantilla presupuesto</a>
+                  <p id="budget-active-period" class="muted period-hint"></p>
+                  <p id="budget-upload-msg" class="muted"></p>
+                  <p id="budget-duplicate-msg" class="muted"></p>
+
+                  <form id="budget-process-form" class="stack-sm">
+                    <label>Columna línea<select name="line"></select></label>
+                    <label>Columna presupuesto<select name="budget"></select></label>
+                    <label>Columna comentario<select name="comment"></select></label>
+                    <button class="btn" type="submit">Procesar presupuesto cargado</button>
+                  </form>
+                  <div id="budget-preview-panel"></div>
+                </div>
+                <div>
+                  <h3>Edición manual presupuesto</h3>
+                  <div id="manual-budget"></div>
+                  <button id="btn-save-budget" class="btn" type="button">Guardar presupuesto manual</button>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="analisis">
+            <section class="panel">
+              <h2>Hallazgos, acciones y calidad de dato</h2>
+              <div id="insights-kpis" class="insights-kpi-grid"></div>
+              <div class="insights-grid">
+                <article class="insight-card insight-card-primary">
+                  <div class="insight-card-head">
+                    <div>
+                      <p class="insight-eyebrow">Lectura gerencial</p>
+                      <h3>Resumen ejecutivo</h3>
+                    </div>
+                  </div>
+                  <div id="executive-summary"></div>
+                </article>
+                <article class="insight-card">
+                  <div class="insight-card-head">
+                    <div>
+                      <p class="insight-eyebrow">Prioridades del mes</p>
+                      <h3>Top desvíos</h3>
+                    </div>
+                  </div>
+                  <div id="top-deviations"></div>
+                </article>
+              </div>
+              <article class="insight-card insight-card-table">
+                <div class="insight-card-head">
+                  <div>
+                    <p class="insight-eyebrow">Ejecución inmediata</p>
+                    <h3>Plan de acción</h3>
+                  </div>
+                </div>
+                <div id="action-plan"></div>
+              </article>
+              <div id="insights-details"></div>
+              <a id="export-link" class="btn disabled" href="#">Descargar reporte mensual Excel</a>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="historico">
+            <section class="panel">
+              <h2>Histórico mensual</h2>
+              <svg id="trend-chart" viewBox="0 0 900 260" class="trend-chart"></svg>
+              <div id="trend-table"></div>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="acciones">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Seguimiento consolidado de acciones</h2>
+                <div class="actions-inline">
+                  <label>Alcance<select id="actions-overview-scope"><option value="month">Mes activo</option><option value="all">Todos los meses</option></select></label>
+                  <button id="btn-refresh-actions-overview" class="btn" type="button">Actualizar seguimiento</button>
+                </div>
+              </div>
+              <p class="muted">Vista consolidada para la empresa activa. Resalta acciones vencidas, por vencer y con datos incompletos.</p>
+              <div id="actions-overview-summary" class="kpi-grid"></div>
+              <div id="actions-overview-sections"></div>
+            </section>
+
+            <section class="panel">
+              <h2>Observaciones y acciones del mes</h2>
+              <div class="grid-2">
+                <div>
+                  <h3>Nueva observación</h3>
+                  <div class="stack-sm">
+                    <input id="note-author" type="text" placeholder="Autor (ej: Gerencia)" />
+                    <textarea id="note-text" rows="4" placeholder="Observación gerencial del mes"></textarea>
+                    <button id="btn-save-note" class="btn" type="button">Guardar observación</button>
+                  </div>
+                  <div id="notes-list"></div>
+                </div>
+                <div>
+                  <h3>Nueva acción</h3>
+                  <div class="stack-sm">
+                    <select id="action-line"></select>
+                    <input id="action-problem" type="text" placeholder="Problema detectado" />
+                    <input id="action-defined" type="text" placeholder="Acción definida" />
+                    <input id="action-responsible" type="text" placeholder="Responsable" />
+                    <div class="grid-2">
+                      <select id="action-priority">
+                        <option>Alta</option>
+                        <option selected>Media</option>
+                        <option>Baja</option>
+                      </select>
+                      <input id="action-due-date" type="date" />
+                    </div>
+                    <button id="btn-save-action" class="btn" type="button">Guardar acción</button>
+                  </div>
+                  <div id="actions-list"></div>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="bitacora">
+            <section class="panel">
+              <h2>Bit&aacute;cora de cargues y borrados</h2>
+              <div class="actions-inline">
+                <label>Mes filtro (opcional)<input id="audit-month-filter" type="month" /></label>
+                <button id="btn-load-audit" class="btn" type="button">Actualizar bit&aacute;cora</button>
+              </div>
+              <div id="audit-log-table"></div>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="configuracion">
+            <section class="panel">
+              <h2>Configuraci&oacute;n por l&iacute;nea P&amp;G</h2>
+              <div id="line-settings"></div>
+              <button id="btn-save-line-settings" class="btn" type="button">Guardar configuraci&oacute;n de l&iacute;neas</button>
+            </section>
+
+            <section class="panel">
+              <h2>Usuario de acceso</h2>
+              <form id="change-profile-form" class="stack-sm auth-settings-form">
+                <label>Nombre visible
+                  <input id="profile-display-name" type="text" autocomplete="name" required />
+                </label>
+                <label>Usuario de acceso
+                  <input id="profile-email" type="text" autocomplete="username" required />
+                </label>
+                <label>Confirmar con contrasena actual
+                  <input id="profile-current-password" type="password" autocomplete="current-password" required />
+                </label>
+                <button class="btn" type="submit">Actualizar usuario</button>
+                <p id="change-profile-message" class="muted"></p>
+              </form>
+            </section>
+
+            <section class="panel">
+              <h2>Seguridad de acceso</h2>
+              <form id="change-password-form" class="stack-sm auth-settings-form">
+                <label>Contrase&ntilde;a actual
+                  <input id="current-password" type="password" autocomplete="current-password" required />
+                </label>
+                <label>Nueva contrase&ntilde;a
+                  <input id="new-password" type="password" autocomplete="new-password" required />
+                </label>
+                <label>Confirmar nueva contrase&ntilde;a
+                  <input id="new-password-confirm" type="password" autocomplete="new-password" required />
+                </label>
+                <button class="btn" type="submit">Actualizar contrase&ntilde;a</button>
+                <p id="change-password-message" class="muted"></p>
+              </form>
+            </section>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js?v=20260406auth3"></script>
+  </body>
+</html>
+
+
+

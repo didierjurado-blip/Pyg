@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    container_name: pyg-control-v2
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_SESSION_TTL_HOURS: ${AUTH_SESSION_TTL_HOURS:-12}
+      AUTH_INITIAL_EMAIL: ${AUTH_INITIAL_EMAIL:-}
+      AUTH_INITIAL_PASSWORD: ${AUTH_INITIAL_PASSWORD:-}
+      AUTH_INITIAL_NAME: ${AUTH_INITIAL_NAME:-Administrador}
+      AUTH_SETUP_TOKEN: ${AUTH_SETUP_TOKEN:-}
+    restart: unless-stopped

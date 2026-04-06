@@ -1,0 +1,13 @@
+Linea,Presupuesto,Comentario
+Ingresos operacionales,340000000,Meta comercial mensual
+Costos de prestacion del servicio / costo de ventas,42000000,Tope de costos directos
+Utilidad bruta,298000000,Objetivo margen bruto
+Gastos operacionales de administracion,150000000,Control administrativo
+Gastos operacionales de ventas,3000000,Tope comercial
+Utilidad operacional,145000000,Meta operacional
+Otros ingresos,3000000,Ingreso no operacional esperado
+Gastos financieros,18000000,Meta tesoreria
+Otros gastos no operacionales,500000,Evitar partidas extraordinarias
+Utilidad antes de impuestos,129500000,Meta antes de renta
+Impuesto de renta,0,Sin provision en demo
+Utilidad neta,129500000,Meta final del mes
