@@ -5,7 +5,7 @@ APP_DIR="${APP_DIR:-/opt/pg-control-v2}"
 GITHUB_OWNER="${GITHUB_OWNER:-didierjurado-blip}"
 GITHUB_REPO="${GITHUB_REPO:-Pyg}"
 GITHUB_REF="${GITHUB_REF:-main}"
-ARCHIVE_URL="https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/${GITHUB_REF}"
+ARCHIVE_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/heads/${GITHUB_REF}.tar.gz"
 TMP_DIR="$(mktemp -d)"
 
 cleanup() {
@@ -47,7 +47,11 @@ fi
 DOWNLOAD_ARGS+=("$ARCHIVE_URL" -o "$TMP_DIR/repo.tar.gz")
 
 echo "[INFO] Downloading ${GITHUB_OWNER}/${GITHUB_REPO}@${GITHUB_REF}"
-curl "${DOWNLOAD_ARGS[@]}"
+if ! curl "${DOWNLOAD_ARGS[@]}"; then
+  echo "[ERROR] Could not download repository archive from: $ARCHIVE_URL" >&2
+  echo "[ERROR] Verify that the repo, branch and permissions are correct." >&2
+  exit 1
+fi
 
 echo "[INFO] Extracting application package"
 tar -xzf "$TMP_DIR/repo.tar.gz" -C "$TMP_DIR"

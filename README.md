@@ -41,6 +41,13 @@ curl -fsSL https://raw.githubusercontent.com/didierjurado-blip/Pyg/main/scripts/
 curl -fsSL https://raw.githubusercontent.com/didierjurado-blip/Pyg/main/scripts/update-vps.sh | bash
 ```
 
+### Diagnostico rapido del tarball
+Antes de instalar, puedes validar que GitHub entregue el paquete del repo:
+```bash
+curl -I https://github.com/didierjurado-blip/Pyg/archive/refs/heads/main.tar.gz
+```
+Debe responder `200 OK` o una redireccion valida.
+
 Para repositorio privado:
 ```bash
 export GITHUB_TOKEN="TU_TOKEN_DE_GITHUB"
