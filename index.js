@@ -2065,7 +2065,7 @@ app.delete('/api/data', (req, res) => {
     });
 
     const stillExists = updatedDb.dataByCompany[companyId].months?.[month];
-    if (stillExists.execution) {
+    if (stillExists?.execution) {
       buildOrRefreshAnalysis(companyId, month);
     }
 
