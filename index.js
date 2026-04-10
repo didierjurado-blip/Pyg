@@ -5,7 +5,7 @@ const multer = require('multer');
 
 const { parseUploadedFile } = require('./src/services/file-parser');
 const { buildExecutionDataset } = require('./src/services/execution-service');
-const { buildBudgetTemplate, normalizeBudgetInput, parseBudgetRowsFromFile } = require('./src/services/budget-service');
+const { buildBudgetTemplate, buildBudgetDataset, normalizeBudgetInput, parseBudgetRowsFromFile } = require('./src/services/budget-service');
 const { compareBudgetVsReal } = require('./src/services/comparison-service');
 const { buildExecutiveSummary, buildFindings, buildActionPlan } = require('./src/services/analysis-service');
 const {
@@ -492,14 +492,14 @@ function buildOrRefreshAnalysis(companyId, month) {
 
     const budgetRows = snapshot.budget?.rows || buildBudgetTemplate();
     const comparison = compareBudgetVsReal({
-      budgetRows,
-      realPygTable: snapshot.execution.contable.pygTable,
+      budgetRows: snapshot.budget?.gerencial?.standardTable || snapshot.budget?.contable?.standardTable || budgetRows,
+      realPygTable: snapshot.execution.gerencial?.standardTable || snapshot.execution.gerencial?.pygTable || snapshot.execution.contable.pygTable,
       lineSettings: companyData.lineSettings,
     });
 
     const dataQualityAlerts = buildDataQualityAlerts({
       comparisonRows: comparison.rows,
-      mappingRows: snapshot.execution.contable.mappingRows,
+      execution: snapshot.execution,
     });
 
     const executiveSummary = buildExecutiveSummary({
@@ -508,6 +508,7 @@ function buildOrRefreshAnalysis(companyId, month) {
       contable: snapshot.execution.contable,
       gerencial: snapshot.execution.gerencial,
       dataQualityAlerts,
+      execution: snapshot.execution,
     });
 
     const findings = buildFindings({ comparison, execution: snapshot.execution });
@@ -1257,7 +1258,8 @@ app.post('/api/budget/preview', (req, res) => {
 
     const uploaded = uploadedBudgetFiles.get(fileId);
     const rows = parseBudgetRowsFromFile(uploaded.rows, mapping || {});
-    const validation = validateBudgetRows(rows);
+    const budget = buildBudgetDataset(rows, uploaded.name);
+    const validation = validateBudgetRows(budget.rows);
     const existingMonthSnapshot = companyData.months?.[normalizedMonth] || null;
     const conflict = Boolean(existingMonthSnapshot?.budget);
 
@@ -1303,16 +1305,17 @@ app.post('/api/budget/process', (req, res) => {
     if (currentSnapshot.budget && !forceReplace) {
       return res.status(409).json({
         conflict: true,
-        error: 'Ya existe presupuesto para este mes y empresa. ¿Deseas reemplazarlo',
+        error: 'Ya existe presupuesto para este mes y empresa. ?Deseas reemplazarlo',
       });
     }
 
     const uploaded = uploadedBudgetFiles.get(fileId);
     const rows = parseBudgetRowsFromFile(uploaded.rows, mapping || {});
-    const validation = validateBudgetRows(rows);
+    const budget = buildBudgetDataset(rows, uploaded.name);
+    const validation = validateBudgetRows(budget.rows);
 
     if (validation.errors.length) {
-      return res.status(400).json({ error: 'El presupuesto tiene errores de validación.', validation });
+      return res.status(400).json({ error: 'El presupuesto tiene errores de validaci?n.', validation });
     }
 
     withDb((currentDb) => {
@@ -1323,7 +1326,7 @@ app.post('/api/budget/process', (req, res) => {
         ...snapshot,
         month: normalizedMonth,
         budget: {
-          rows,
+          ...budget,
           sourceFileName: uploaded.name,
           uploadedAt: new Date().toISOString(),
         },
@@ -1344,7 +1347,7 @@ app.post('/api/budget/process', (req, res) => {
         dataType: 'presupuesto',
         fileName: uploaded.name,
         rowsRead: uploaded.rows.length,
-        rowsProcessed: rows.length,
+        rowsProcessed: budget.rows.length,
         resultStatus: validation.warnings.length ? 'con_alertas' : 'exitoso',
         messageSummary: 'Presupuesto guardado correctamente.',
         alertsDetected: validation.warnings,
@@ -1383,15 +1386,15 @@ app.post('/api/budget/save', (req, res) => {
     if (currentSnapshot.budget && !forceReplace) {
       return res.status(409).json({
         conflict: true,
-        error: 'Ya existe presupuesto para este mes y empresa. ¿Deseas reemplazarlo',
+        error: 'Ya existe presupuesto para este mes y empresa. ?Deseas reemplazarlo',
       });
     }
 
-    const rows = normalizeBudgetInput(items || []);
-    const validation = validateBudgetRows(rows);
+    const budget = buildBudgetDataset(items || [], 'manual');
+    const validation = validateBudgetRows(budget.rows);
 
     if (validation.errors.length) {
-      return res.status(400).json({ error: 'El presupuesto tiene errores de validación.', validation });
+      return res.status(400).json({ error: 'El presupuesto tiene errores de validaci?n.', validation });
     }
 
     withDb((currentDb) => {
@@ -1402,7 +1405,7 @@ app.post('/api/budget/save', (req, res) => {
         ...snapshot,
         month: normalizedMonth,
         budget: {
-          rows,
+          ...budget,
           sourceFileName: 'manual',
           uploadedAt: new Date().toISOString(),
         },
@@ -1422,8 +1425,8 @@ app.post('/api/budget/save', (req, res) => {
         eventType: loadInfo.replacedRecordId ? 'replace_presupuesto' : 'upload_presupuesto',
         dataType: 'presupuesto',
         fileName: 'manual',
-        rowsRead: rows.length,
-        rowsProcessed: rows.length,
+        rowsRead: budget.rows.length,
+        rowsProcessed: budget.rows.length,
         resultStatus: 'exitoso',
         messageSummary: 'Presupuesto manual guardado correctamente.',
         alertsDetected: validation.warnings || [],
@@ -1505,11 +1508,14 @@ app.get('/api/budget/:month', (req, res) => {
     const month = ensureMonth(req.params.month);
     const { companyData } = getCompanyData(db, companyId);
     const snapshot = companyData.months[month] || null;
+    const budget = snapshot?.budget?.contable
+      ? snapshot.budget
+      : buildBudgetDataset(snapshot?.budget?.rows || buildBudgetTemplate(), snapshot?.budget?.sourceFileName || null);
 
     return res.json({
       companyId,
       month,
-      budget: snapshot?.budget || { rows: buildBudgetTemplate(), sourceFileName: null },
+      budget,
       validation: snapshot?.budgetValidation || { errors: [], warnings: [] },
       monthStatus: getMonthStatusPayload(companyData, month),
     });
@@ -1549,16 +1555,19 @@ app.post('/api/budget/duplicate', (req, res) => {
     if (currentSnapshot.budget && !forceReplace) {
       return res.status(409).json({
         conflict: true,
-        error: 'Ya existe presupuesto en el mes destino. ¿Deseas reemplazarlo',
+        error: 'Ya existe presupuesto en el mes destino. ?Deseas reemplazarlo',
       });
     }
 
     const duplicatedRows = sourceSnapshot.budget.rows.map((row) => ({
+      detailKey: row.detailKey,
       lineKey: row.lineKey,
       lineLabel: row.lineLabel,
+      subgroup: row.subgroup,
       budget: Number(row.budget || 0),
       comment: String(row.comment || ''),
     }));
+    const duplicatedBudget = buildBudgetDataset(duplicatedRows, 'duplicado de ' + resolvedSourceMonth);
 
     withDb((currentDb) => {
       const { companyData: mutableCompanyData } = getCompanyData(currentDb, companyId);
@@ -1568,8 +1577,8 @@ app.post('/api/budget/duplicate', (req, res) => {
         ...destinationSnapshot,
         month: normalizedMonth,
         budget: {
-          rows: duplicatedRows,
-          sourceFileName: `duplicado de ${resolvedSourceMonth}`,
+          ...duplicatedBudget,
+          sourceFileName: 'duplicado de ' + resolvedSourceMonth,
           uploadedAt: new Date().toISOString(),
           duplicatedFromMonth: resolvedSourceMonth,
         },
@@ -1580,7 +1589,7 @@ app.post('/api/budget/duplicate', (req, res) => {
       const loadInfo = upsertLoadRecord(mutableCompanyData, {
         type: 'presupuesto',
         month: normalizedMonth,
-        fileName: `duplicado de ${resolvedSourceMonth}`,
+        fileName: 'duplicado de ' + resolvedSourceMonth,
       });
 
       pushAuditLog(currentDb, companyId, {
@@ -1588,15 +1597,15 @@ app.post('/api/budget/duplicate', (req, res) => {
         month: normalizedMonth,
         eventType: 'duplicate_budget',
         dataType: 'presupuesto',
-        fileName: `duplicado de ${resolvedSourceMonth}`,
+        fileName: 'duplicado de ' + resolvedSourceMonth,
         rowsRead: duplicatedRows.length,
         rowsProcessed: duplicatedRows.length,
         resultStatus: 'exitoso',
-        messageSummary: `Presupuesto duplicado correctamente de ${resolvedSourceMonth} a ${normalizedMonth}.`,
+        messageSummary: 'Presupuesto duplicado correctamente de ' + resolvedSourceMonth + ' a ' + normalizedMonth + '.',
         alertsDetected: [
-          `origen:${resolvedSourceMonth}`,
-          `destino:${normalizedMonth}`,
-          `reemplazo:${loadInfo.replacedRecordId ? 'si' : 'no'}`,
+          'origen:' + resolvedSourceMonth,
+          'destino:' + normalizedMonth,
+          'reemplazo:' + (loadInfo.replacedRecordId ? 'si' : 'no'),
         ],
         replacedRecordId: loadInfo.replacedRecordId,
       });
@@ -1613,7 +1622,7 @@ app.post('/api/budget/duplicate', (req, res) => {
       month: normalizedMonth,
       budget: updatedSnapshot.budget,
       monthStatus: getMonthStatusPayload(updatedDb.dataByCompany[companyId], normalizedMonth),
-      message: `Presupuesto duplicado correctamente de ${resolvedSourceMonth} a ${normalizedMonth}.`,
+      message: 'Presupuesto duplicado correctamente de ' + resolvedSourceMonth + ' a ' + normalizedMonth + '.',
     });
   } catch (error) {
     return res.status(400).json({ error: error.message || 'No fue posible duplicar el presupuesto.' });

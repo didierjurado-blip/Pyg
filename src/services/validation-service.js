@@ -17,7 +17,7 @@ function validateExecutionRows(rows, mapping) {
   for (const column of required) {
     const hasColumn = rows.some((row) => Object.prototype.hasOwnProperty.call(row, column));
     if (!hasColumn) {
-      errors.push(`No se encontro la columna requerida: ${column}`);
+      errors.push(`No se encontró la columna requerida: ${column}`);
     }
   }
 
@@ -28,7 +28,7 @@ function validateExecutionRows(rows, mapping) {
   });
 
   if (!nonEmptyRows.length) {
-    errors.push('Todas las filas estan vacias en cuenta/nombre cuenta.');
+    errors.push('Todas las filas están vacías en cuenta/nombre cuenta.');
   }
 
   const duplicates = new Map();
@@ -42,6 +42,11 @@ function validateExecutionRows(rows, mapping) {
     warnings.push(`Se detectaron ${duplicatedCount} cuentas duplicadas.`);
   }
 
+  const missingDescriptions = nonEmptyRows.filter((row) => !String(row[mapping.accountName] || '').trim()).length;
+  if (missingDescriptions > 0) {
+    warnings.push(`Hay ${missingDescriptions} cuentas sin descripción.`);
+  }
+
   const amountField = mapping.balance || '';
   if (amountField) {
     const nonNumeric = nonEmptyRows.filter((row) => {
@@ -50,7 +55,7 @@ function validateExecutionRows(rows, mapping) {
     }).length;
 
     if (nonNumeric > 0) {
-      warnings.push(`Hay ${nonNumeric} filas con valores no numericos en la columna de saldo.`);
+      warnings.push(`Hay ${nonNumeric} filas con valores no numéricos en la columna de saldo.`);
     }
   }
 
@@ -61,7 +66,7 @@ function validateExecutionRows(rows, mapping) {
   });
 
   if (hasIncomePositive) {
-    warnings.push('Se detectaron ingresos en signo positivo en la base original; se normalizaran para P&G.');
+    warnings.push('Se detectaron ingresos en signo positivo en la base original; se normalizarán para P&G.');
   }
 
   return { errors, warnings };
@@ -78,12 +83,12 @@ function validateBudgetRows(rows) {
 
   const withoutLine = rows.filter((row) => !String(row.lineKey || '').trim()).length;
   if (withoutLine > 0) {
-    errors.push(`Hay ${withoutLine} filas de presupuesto sin linea P&G.`);
+    errors.push(`Hay ${withoutLine} filas de presupuesto sin línea P&G.`);
   }
 
   const invalidBudget = rows.filter((row) => Number.isNaN(parseMoney(row.budget))).length;
   if (invalidBudget > 0) {
-    errors.push(`Hay ${invalidBudget} filas con presupuesto invalido.`);
+    errors.push(`Hay ${invalidBudget} filas con presupuesto inválido.`);
   }
 
   return { errors, warnings };
@@ -112,7 +117,7 @@ function buildExecutionPreviewSummary({ rows, mapping, headers, validation, temp
     destination: {
       companyName,
       month,
-      dataType: 'ejecucion',
+      dataType: 'ejecución',
     },
     fileName,
     columnsDetected: headers || [],
@@ -123,6 +128,7 @@ function buildExecutionPreviewSummary({ rows, mapping, headers, validation, temp
     unclassifiedCount: unclassified.length,
     unclassifiedSample: unclassified.slice(0, 5).map((row) => `${row.account} ${row.accountName}`),
     suspiciousSignCount,
+    managerialAdjustmentsCount: tempExecution?.summary?.managerialAdjustmentsCount || 0,
     conflict,
     rowsProcessed: tempExecution?.baseRows?.length || 0,
     warnings: validation.warnings || [],
@@ -163,33 +169,48 @@ function buildBudgetPreviewSummary({ rows, mapping, headers, validation, parsedR
   };
 }
 
-function buildDataQualityAlerts({ comparisonRows, mappingRows }) {
+function buildDataQualityAlerts({ comparisonRows, execution }) {
   const alerts = [];
 
-  const withoutBudget = comparisonRows.filter((row) => row.budget === null).map((row) => row.lineLabel);
+  const withoutBudget = (comparisonRows || []).filter((row) => row.budget === null).map((row) => row.lineLabel);
   if (withoutBudget.length) {
-    alerts.push(`Lineas sin presupuesto: ${withoutBudget.join(', ')}.`);
+    alerts.push(`Líneas sin presupuesto: ${withoutBudget.join(', ')}.`);
   }
 
-  const budgetZeroRealMaterial = comparisonRows.filter(
+  const budgetZeroRealMaterial = (comparisonRows || []).filter(
     (row) => (row.budget || 0) === 0 && Math.abs(row.real || 0) > 0
   );
   if (budgetZeroRealMaterial.length) {
     alerts.push(
-      `Lineas con presupuesto cero y ejecucion material: ${budgetZeroRealMaterial
+      `Líneas con presupuesto cero y ejecución material: ${budgetZeroRealMaterial
         .map((row) => row.lineLabel)
         .join(', ')}.`
     );
   }
 
+  const mappingRows = execution?.contable?.mappingRows || [];
+  const automaticNotes = execution?.automaticNotes || {};
+
   const unclassified = mappingRows.filter((row) => row.sectionKey === 'no_clasificado');
   if (unclassified.length) {
-    alerts.push(`Cuentas sin clasificacion PUC base: ${unclassified.length}.`);
+    alerts.push(`Cuentas sin clasificación PUC base: ${unclassified.length}.`);
   }
 
-  const suspicious = mappingRows.filter((row) => /posible cuenta de balance|partida no recurrente|extraordinaria/i.test(normalizeText(row.alertsText)));
+  const suspicious = mappingRows.filter((row) => /saldo|reclasificacion|iva|activo|descuento/i.test(normalizeText(row.observation || row.alertsText)));
   if (suspicious.length) {
-    alerts.push(`Cuentas con alertas contables: ${suspicious.length}.`);
+    alerts.push(`Cuentas con alertas contables o gerenciales: ${suspicious.length}.`);
+  }
+
+  if ((automaticNotes.exclusionsSuggested || []).length) {
+    alerts.push(`Exclusiones gerenciales sugeridas: ${(automaticNotes.exclusionsSuggested || []).length}.`);
+  }
+
+  if ((automaticNotes.reclassificationsSuggested || []).length) {
+    alerts.push(`Reclasificaciones sugeridas: ${(automaticNotes.reclassificationsSuggested || []).length}.`);
+  }
+
+  if ((automaticNotes.missingDescriptions || []).length) {
+    alerts.push(`Cuentas sin descripción: ${(automaticNotes.missingDescriptions || []).length}.`);
   }
 
   return alerts;

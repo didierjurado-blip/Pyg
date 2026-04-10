@@ -952,3 +952,81 @@ body.auth-locked .app-shell {
 .muted.error-text {
   color: var(--bad);
 }
+
+.analysis-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.analysis-standard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.compact-table table {
+  font-size: 12px;
+}
+
+.compact-table th,
+.compact-table td {
+  white-space: normal;
+}
+
+.insight-card-details {
+  margin-top: 16px;
+}
+
+.insight-card-details summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.insight-card-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.adjustment-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metric-card-inline {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.metric-card-inline span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.metric-card-inline strong {
+  font-size: 18px;
+}
+
+.note-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.muted-inline {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .analysis-grid-2,
+  .analysis-standard-grid,
+  .adjustment-summary {
+    grid-template-columns: 1fr;
+  }
+}

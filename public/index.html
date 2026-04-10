@@ -209,6 +209,7 @@
                   <p id="budget-active-period" class="muted period-hint"></p>
                   <p id="budget-upload-msg" class="muted"></p>
                   <p id="budget-duplicate-msg" class="muted"></p>
+                  <div id="budget-assumptions" class="muted"></div>
 
                   <form id="budget-process-form" class="stack-sm">
                     <label>Columna línea<select name="line"></select></label>
@@ -254,13 +255,59 @@
               <article class="insight-card insight-card-table">
                 <div class="insight-card-head">
                   <div>
-                    <p class="insight-eyebrow">Ejecución inmediata</p>
-                    <h3>Plan de acción</h3>
+                    <p class="insight-eyebrow">Ejecuci?n inmediata</p>
+                    <h3>Plan de acci?n</h3>
                   </div>
                 </div>
                 <div id="action-plan"></div>
               </article>
-              <div id="insights-details"></div>
+              <div class="analysis-grid-2">
+                <article class="insight-card">
+                  <div class="insight-card-head">
+                    <div>
+                      <p class="insight-eyebrow">Modelo contable</p>
+                      <h3>P&amp;G est?ndar</h3>
+                    </div>
+                  </div>
+                  <div id="analysis-standard"></div>
+                </article>
+                <article class="insight-card">
+                  <div class="insight-card-head">
+                    <div>
+                      <p class="insight-eyebrow">Modelo gerencial</p>
+                      <h3>Ajustes y exclusiones</h3>
+                    </div>
+                  </div>
+                  <div id="analysis-adjustments"></div>
+                </article>
+              </div>
+              <article class="insight-card insight-card-table">
+                <div class="insight-card-head">
+                  <div>
+                    <p class="insight-eyebrow">Apertura por subrubros</p>
+                    <h3>P&amp;G detallado</h3>
+                  </div>
+                </div>
+                <div id="analysis-detailed"></div>
+              </article>
+              <article class="insight-card insight-card-table">
+                <div class="insight-card-head">
+                  <div>
+                    <p class="insight-eyebrow">Auditor?a del procesamiento</p>
+                    <h3>Mapeo de cuentas</h3>
+                  </div>
+                </div>
+                <div id="analysis-mapping"></div>
+              </article>
+              <details class="insight-card insight-card-details" open>
+                <summary>
+                  <span>
+                    <p class="insight-eyebrow">Soporte t?cnico</p>
+                    <h3>Notas y advertencias</h3>
+                  </span>
+                </summary>
+                <div id="insights-details"></div>
+              </details>
               <a id="export-link" class="btn disabled" href="#">Descargar reporte mensual Excel</a>
             </section>
           </section>
@@ -378,7 +425,7 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260406auth3"></script>
+    <script src="/app.js?v=20260409contai1"></script>
   </body>
 </html>
 

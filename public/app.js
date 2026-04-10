@@ -88,6 +88,7 @@ const budgetFile = document.getElementById('budget-file');
 const budgetActivePeriod = document.getElementById('budget-active-period');
 const budgetUploadMsg = document.getElementById('budget-upload-msg');
 const budgetDuplicateMsg = document.getElementById('budget-duplicate-msg');
+const budgetAssumptions = document.getElementById('budget-assumptions');
 const manualBudget = document.getElementById('manual-budget');
 const btnSaveBudget = document.getElementById('btn-save-budget');
 const btnDeleteBudget = document.getElementById('btn-delete-budget');
@@ -136,6 +137,10 @@ const executiveSummary = document.getElementById('executive-summary');
 const topDeviations = document.getElementById('top-deviations');
 const insightsDetails = document.getElementById('insights-details');
 const actionPlan = document.getElementById('action-plan');
+const analysisStandard = document.getElementById('analysis-standard');
+const analysisDetailed = document.getElementById('analysis-detailed');
+const analysisAdjustments = document.getElementById('analysis-adjustments');
+const analysisMapping = document.getElementById('analysis-mapping');
 const exportLink = document.getElementById('export-link');
 
 const trendChart = document.getElementById('trend-chart');
@@ -524,25 +529,21 @@ function applyMoneyInputBehavior(container) {
 }
 
 function renderManualBudgetRows(rows) {
-  manualBudget.innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Línea</th><th>Presupuesto</th><th>Comentario</th></tr></thead>
-        <tbody>
-          ${rows
-            .map(
-              (row) => `
-            <tr data-line="${row.lineKey}">
-              <td>${row.lineLabel}</td>
-              <td><input type="text" class="money-input" value="${formatNumber(row.budget || 0)}" data-field="budget" /></td>
-              <td><input type="text" value="${row.comment || ''}" data-field="comment" /></td>
-            </tr>`
-            )
-            .join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+  manualBudget.innerHTML =     '<div class="table-wrap">' +
+      '<table>' +
+        '<thead><tr><th>Secci?n</th><th>Subgrupo</th><th>Presupuesto</th><th>Comentario</th></tr></thead>' +
+        '<tbody>' +
+          rows.map((row) =>
+            '<tr data-line="' + (row.lineKey || '') + '" data-detail="' + (row.detailKey || row.lineKey || '') + '">' +
+              '<td>' + escapeHtml(row.lineLabel || '-') + '</td>' +
+              '<td>' + escapeHtml(row.subgroup || row.lineLabel || '-') + '</td>' +
+              '<td><input type="text" class="money-input" value="' + formatNumber(row.budget || 0) + '" data-field="budget" /></td>' +
+              '<td><input type="text" value="' + escapeHtml(row.comment || '') + '" data-field="comment" /></td>' +
+            '</tr>'
+          ).join('') +
+        '</tbody>' +
+      '</table>' +
+    '</div>';
 
   applyMoneyInputBehavior(manualBudget);
 }
@@ -550,10 +551,23 @@ function renderManualBudgetRows(rows) {
 function collectManualBudget() {
   const rows = Array.from(manualBudget.querySelectorAll('tbody tr'));
   return rows.map((tr) => ({
+    detailKey: tr.getAttribute('data-detail'),
     lineKey: tr.getAttribute('data-line'),
     budget: parseLocalizedNumber(tr.querySelector('[data-field="budget"]').value || 0),
     comment: tr.querySelector('[data-field="comment"]').value || '',
   }));
+}
+
+function renderBudgetModule(budget) {
+  const rows = budget?.rows || [];
+  renderManualBudgetRows(rows);
+
+  if (budgetAssumptions) {
+    const notes = budget?.notes || budget?.assumptions || [];
+    budgetAssumptions.innerHTML = notes.length
+      ? '<ul class="detail-list">' + notes.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') + '</ul>'
+      : '<p class="muted">Sin supuestos gerenciales visibles para este presupuesto.</p>';
+  }
 }
 
 function renderCompanyTabs() {
@@ -893,32 +907,133 @@ function renderActionPlanExecutive(rows) {
   `;
 }
 
-function renderInsightsDetails(findingsList, qualityList) {
+function renderStandardPygTables(execution) {
+  if (!analysisStandard) return;
+  const contableRows = execution?.contable?.standardTable || execution?.contable?.pygTable || [];
+  const gerencialRows = execution?.gerencial?.standardTable || execution?.gerencial?.pygTable || [];
+
+  if (!contableRows.length && !gerencialRows.length) {
+    analysisStandard.innerHTML = '<p class="muted">Sin P&G est?ndar disponible.</p>';
+    return;
+  }
+
+  const makeRows = (rows) => rows.map((row) =>
+    '<tr>' +
+      '<td>' + escapeHtml(row.lineLabel || '-') + '</td>' +
+      '<td>' + (row.value === null || row.value === undefined ? '-' : formatCurrency(row.value)) + '</td>' +
+    '</tr>'
+  ).join('');
+
+  analysisStandard.innerHTML =
+    '<div class="analysis-standard-grid">' +
+      '<section>' +
+        '<h4>Contable</h4>' +
+        '<div class="table-wrap compact-table"><table><thead><tr><th>L?nea</th><th>Valor</th></tr></thead><tbody>' + makeRows(contableRows) + '</tbody></table></div>' +
+      '</section>' +
+      '<section>' +
+        '<h4>Gerencial ajustado</h4>' +
+        '<div class="table-wrap compact-table"><table><thead><tr><th>L?nea</th><th>Valor</th></tr></thead><tbody>' + makeRows(gerencialRows) + '</tbody></table></div>' +
+      '</section>' +
+    '</div>';
+}
+
+function renderDetailedPyg(execution) {
+  if (!analysisDetailed) return;
+  const rows = execution?.contable?.detailedTable || [];
+  if (!rows.length) {
+    analysisDetailed.innerHTML = '<p class="muted">Sin detalle por subrubros disponible.</p>';
+    return;
+  }
+
+  renderTable(analysisDetailed, rows, [
+    { key: 'sectionLabel', label: 'Secci?n P&G' },
+    { key: 'subgroup', label: 'Subgrupo' },
+    { key: 'value', label: 'Valor', currency: true },
+    { key: 'accountCount', label: 'Cuentas', number: true },
+  ]);
+}
+
+function renderManagerialAdjustments(execution) {
+  if (!analysisAdjustments) return;
+  const rows = execution?.managerialAdjustments || [];
+  const totals = execution?.gerencial?.totals || {};
+  const contableTotals = execution?.contable?.totals || {};
+
+  if (!rows.length) {
+    analysisAdjustments.innerHTML =
+      '<div class="note-stack">' +
+        '<p class="muted">No se identificaron exclusiones gerenciales autom?ticas para este mes.</p>' +
+        '<div class="metric-card-inline"><span>Utilidad contable antes impuestos</span><strong>' + formatCurrency(contableTotals.utilidad_antes_impuestos || 0) + '</strong></div>' +
+        '<div class="metric-card-inline"><span>ICA estimado gerencial</span><strong>' + formatCurrency(totals.ica_estimado_gerencial || 0) + '</strong></div>' +
+        '<div class="metric-card-inline"><span>Utilidad gerencial ajustada</span><strong>' + formatCurrency(totals.utilidad_gerencial_ajustada || totals.utilidad_antes_impuestos || 0) + '</strong></div>' +
+      '</div>';
+    return;
+  }
+
+  const totalExcluded = rows.reduce((sum, row) => sum + Number(row.excludedValue || 0), 0);
+  analysisAdjustments.innerHTML =
+    '<div class="adjustment-summary">' +
+      '<article class="metric-card-inline"><span>Valor excluido sugerido</span><strong>' + formatCurrency(totalExcluded) + '</strong></article>' +
+      '<article class="metric-card-inline"><span>Utilidad contable antes impuestos</span><strong>' + formatCurrency(contableTotals.utilidad_antes_impuestos || 0) + '</strong></article>' +
+      '<article class="metric-card-inline"><span>ICA estimado gerencial</span><strong>' + formatCurrency(totals.ica_estimado_gerencial || 0) + '</strong></article>' +
+      '<article class="metric-card-inline"><span>Utilidad gerencial ajustada</span><strong>' + formatCurrency(totals.utilidad_gerencial_ajustada || totals.utilidad_antes_impuestos || 0) + '</strong></article>' +
+    '</div>' +
+    '<div class="table-wrap compact-table"><table><thead><tr><th>Cuenta</th><th>Secci?n</th><th>Subgrupo</th><th>Valor excluido</th><th>Raz?n</th></tr></thead><tbody>' +
+    rows.map((row) =>
+      '<tr>' +
+        '<td><strong>' + escapeHtml(row.account) + '</strong><br><span class="muted-inline">' + escapeHtml(row.accountName) + '</span></td>' +
+        '<td>' + escapeHtml(row.sectionLabel || '-') + '</td>' +
+        '<td>' + escapeHtml(row.subgroup || '-') + '</td>' +
+        '<td>' + formatCurrency(row.excludedValue || 0) + '</td>' +
+        '<td>' + escapeHtml(row.reason || '-') + '</td>' +
+      '</tr>'
+    ).join('') +
+    '</tbody></table></div>';
+}
+
+function renderAccountMapping(execution) {
+  if (!analysisMapping) return;
+  const rows = execution?.accountMapping || [];
+  if (!rows.length) {
+    analysisMapping.innerHTML = '<p class="muted">Sin mapeo de cuentas disponible.</p>';
+    return;
+  }
+
+  renderTable(analysisMapping, rows, [
+    { key: 'account', label: 'Cuenta' },
+    { key: 'accountName', label: 'Nombre cuenta' },
+    { key: 'saldoOriginal', label: 'Saldo original', currency: true },
+    { key: 'valorPyg', label: 'Valor P&G', currency: true },
+    { key: 'seccionPyg', label: 'Secci?n P&G' },
+    { key: 'subgrupo', label: 'Subgrupo' },
+    { key: 'observacion', label: 'Observaci?n' },
+  ]);
+}
+
+function renderInsightsDetails(findingsList, qualityList, execution) {
   if (!insightsDetails) return;
 
-  const findingsHtml = findingsList.length
-    ? `<ul class="detail-list">${findingsList.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
-    : '<p class="muted">Sin hallazgos extendidos.</p>';
+  const automaticNotes = execution?.automaticNotes || {};
+  const sections = [
+    { title: 'Hallazgos extendidos', rows: findingsList || [] },
+    { title: 'Calidad de dato', rows: qualityList || [] },
+    { title: 'Exclusiones sugeridas', rows: automaticNotes.exclusionsSuggested || [] },
+    { title: 'Reclasificaciones sugeridas', rows: automaticNotes.reclassificationsSuggested || [] },
+    { title: 'Cuentas sin descripci?n', rows: automaticNotes.missingDescriptions || [] },
+    { title: 'Notas t?cnicas', rows: automaticNotes.technicalNotes || [] },
+  ];
 
-  const qualityHtml = qualityList.length
-    ? `<ul class="detail-list">${qualityList.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
-    : '<p class="muted">Sin alertas de calidad de dato.</p>';
-
-  insightsDetails.innerHTML = `
-    <details class="insight-details-card">
-      <summary>Ver detalle de calidad de dato y análisis extendido</summary>
-      <div class="insight-details-grid">
-        <div>
-          <h4>Hallazgos extendidos</h4>
-          ${findingsHtml}
-        </div>
-        <div>
-          <h4>Calidad de dato</h4>
-          ${qualityHtml}
-        </div>
-      </div>
-    </details>
-  `;
+  insightsDetails.innerHTML =
+    '<div class="insight-details-grid">' +
+    sections.map((section) =>
+      '<div>' +
+        '<h4>' + escapeHtml(section.title) + '</h4>' +
+        (section.rows.length
+          ? '<ul class="detail-list">' + section.rows.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') + '</ul>'
+          : '<p class="muted">Sin elementos en esta secci?n.</p>') +
+      '</div>'
+    ).join('') +
+    '</div>';
 }
 
 function renderTrendChart(points) {
@@ -971,27 +1086,27 @@ function renderAnalysis(payload) {
   renderMonthStatusPanel();
 
   renderKpis(payload.comparison, payload.analysis.executiveSummary);
-  renderTable(pygContable, payload.execution.contable.pygTable, [
-    { key: 'lineLabel', label: 'Línea' },
+  renderTable(pygContable, payload.execution.contable.standardTable || payload.execution.contable.pygTable, [
+    { key: 'lineLabel', label: 'L?nea' },
     { key: 'value', label: 'Valor', currency: true },
   ]);
 
-  renderTable(pygGerencial, payload.execution.gerencial.pygTable, [
-    { key: 'lineLabel', label: 'Línea' },
+  renderTable(pygGerencial, payload.execution.gerencial.standardTable || payload.execution.gerencial.pygTable, [
+    { key: 'lineLabel', label: 'L?nea' },
     { key: 'value', label: 'Valor', currency: true },
   ]);
 
   renderTable(comparisonTable, payload.comparison?.rows || [], [
-    { key: 'lineLabel', label: 'Línea' },
+    { key: 'lineLabel', label: 'L?nea' },
     { key: 'budget', label: 'Presupuesto', currency: true },
     { key: 'real', label: 'Real', currency: true },
-    { key: 'variation', label: 'Variacion $', currency: true },
-    { key: 'variationPct', label: 'Variacion %', percent: true },
+    { key: 'variation', label: 'Variaci?n $', currency: true },
+    { key: 'variationPct', label: 'Variaci?n %', percent: true },
     { key: 'favorable', label: 'Favorable', boolean: true },
     { key: 'status', label: 'Estado', badge: true },
     { key: 'priority', label: 'Prioridad' },
     { key: 'comment', label: 'Comentario' },
-    { key: 'actionSuggested', label: 'Acción sugerida' },
+    { key: 'actionSuggested', label: 'Acci?n sugerida' },
     { key: 'responsibleSuggested', label: 'Responsable sugerido' },
   ]);
 
@@ -1008,7 +1123,11 @@ function renderAnalysis(payload) {
   renderInsightsSummary(payload.analysis.executiveSummary, findingsList, topDeviationRows[0] || null, actionRows[0] || null);
   renderTopDeviations(topDeviationRows);
   renderActionPlanExecutive(actionRows);
-  renderInsightsDetails(findingsList, qualityList);
+  renderStandardPygTables(payload.execution);
+  renderDetailedPyg(payload.execution);
+  renderManagerialAdjustments(payload.execution);
+  renderAccountMapping(payload.execution);
+  renderInsightsDetails(findingsList, qualityList, payload.execution);
 
   renderLineSettingsSprint2(state.lineSettings);
   renderNotesSprint2(state.notes);
@@ -1017,36 +1136,14 @@ function renderAnalysis(payload) {
   exportLink.href = companyQuery(`/api/export/${state.month}`);
   exportLink.classList.remove('disabled');
 
-  const budgetRows = payload.budget?.rows || [];
-  renderManualBudgetRows(
-    state.meta.pygLines.map((line) => {
-      const found = budgetRows.find((item) => item.lineKey === line.key);
-      return {
-        lineKey: line.key,
-        lineLabel: line.label,
-        budget: found.budget || 0,
-        comment: found.comment || '',
-      };
-    })
-  );
+  renderBudgetModule(payload.budget);
 }
 
 async function loadBudgetOnly() {
   const payload = await api(companyQuery(`/api/budget/${state.month}`));
   state.monthStatus = payload.monthStatus || state.monthStatus || null;
   renderMonthStatusPanel();
-  const rows = payload.budget?.rows || [];
-  renderManualBudgetRows(
-    state.meta.pygLines.map((line) => {
-      const found = rows.find((item) => item.lineKey === line.key);
-      return {
-        lineKey: line.key,
-        lineLabel: line.label,
-        budget: found.budget || 0,
-        comment: found.comment || '',
-      };
-    })
-  );
+  renderBudgetModule(payload.budget);
 }
 
 async function loadTrend() {

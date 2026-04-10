@@ -83,6 +83,8 @@ function buildActionSuggestion(lineKey, status, favorable, hasBudget) {
     gastos_financieros: 'Optimizar flujo de caja y renegociar condiciones financieras.',
     otros_gastos_no_operacionales: 'Depurar eventos no recurrentes y exigir autorizacion previa.',
     utilidad_neta: 'Activar plan integral de rentabilidad con responsables por frente.',
+    ica_estimado_gerencial: 'Validar la base de ingresos usada para el c?lculo del ICA gerencial estimado.',
+    utilidad_gerencial_ajustada: 'Revisar conjuntamente ingresos, ICA y estructura de gasto para recuperar la utilidad ajustada.',
   };
 
   return suggestions[lineKey] || 'Abrir plan de accion correctivo con seguimiento semanal.';
@@ -106,8 +108,8 @@ function buildComment(lineLabel, status, favorable, variationPct, hasBudget) {
 
 function compareBudgetVsReal({ budgetRows, realPygTable, lineSettings }) {
   const settingsMap = normalizeLineSettings(lineSettings);
-  const budgetMap = new Map((budgetRows || []).map((row) => [row.lineKey, Number(row.budget || 0)]));
-  const realMap = new Map((realPygTable || []).map((row) => [row.lineKey, Number(row.value || 0)]));
+  const budgetMap = new Map((budgetRows || []).map((row) => [row.lineKey, Number((row.budget ?? row.value ?? 0))]));
+  const realMap = new Map((realPygTable || []).map((row) => [row.lineKey, Number((row.real ?? row.value ?? 0))]));
 
   const rows = PYG_LINES.map((line) => {
     const setting = settingsMap[line.key] || {};
@@ -147,6 +149,8 @@ function compareBudgetVsReal({ budgetRows, realPygTable, lineSettings }) {
     incumplidas: rows.filter((row) => row.status === 'Incumplido').length,
     utilidadNetaReal: rows.find((row) => row.lineKey === 'utilidad_neta')?.real || 0,
     utilidadNetaPresupuesto: rows.find((row) => row.lineKey === 'utilidad_neta')?.budget || 0,
+    utilidadGerencialAjustadaReal: rows.find((row) => row.lineKey === 'utilidad_gerencial_ajustada')?.real || 0,
+    utilidadGerencialAjustadaPresupuesto: rows.find((row) => row.lineKey === 'utilidad_gerencial_ajustada')?.budget || 0,
   };
 
   return {
