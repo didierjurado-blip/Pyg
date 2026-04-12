@@ -1,0 +1,96 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Control P&G V2 API",
+    "version": "2.0.0",
+    "description": "API HTTP para control financiero local (sesión por cookie, CSRF en mutaciones). Roles: viewer (lectura), editor (carga y ajustes operativos), admin (estructura y borrados críticos)."
+  },
+  "servers": [{ "url": "/", "description": "Origen actual" }],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Liveness",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/ready": {
+      "get": {
+        "summary": "Readiness (JSON + Postgres opcional)",
+        "responses": { "200": { "description": "Listo" }, "503": { "description": "No listo" } }
+      }
+    },
+    "/api/openapi.json": {
+      "get": { "summary": "Este documento", "responses": { "200": { "description": "OpenAPI" } } }
+    },
+    "/api/auth/session": {
+      "get": { "summary": "Estado de sesión y setup", "responses": { "200": { "description": "Payload de auth" } } }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Inicio de sesión (puede devolver mfaRequired)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Sesión o desafío MFA" }, "401": { "description": "Credenciales inválidas" } }
+      }
+    },
+    "/api/auth/mfa/verify-login": {
+      "post": {
+        "summary": "Completar login con TOTP",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mfaChallengeId": { "type": "string" },
+                  "code": { "type": "string" }
+                },
+                "required": ["mfaChallengeId", "code"]
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Sesión creada" } }
+      }
+    },
+    "/api/execution/process-async": {
+      "post": {
+        "summary": "Procesar ejecución en segundo plano (202 + jobId)",
+        "responses": { "202": { "description": "Job encolado" } }
+      }
+    },
+    "/api/jobs/{jobId}": {
+      "get": {
+        "summary": "Estado de trabajo asíncrono",
+        "parameters": [{ "name": "jobId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Estado del job" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "pgc_session"
+      },
+      "csrfHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token"
+      }
+    }
+  }
+}

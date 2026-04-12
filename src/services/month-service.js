@@ -1,177 +1,158 @@
-const { ensureMonth, getTodayLocalDateKey, addDaysToDateKey } = require('../utils/date-utils');
-
 function getMonthClosure(companyData, month) {
-  const normalizedMonth = ensureMonth(month);
-  const raw = companyData?.monthClosures?.[normalizedMonth] || {};
-  const history = Array.isArray(raw.history) ? raw.history : [];
-
+  const closures = companyData.monthClosures || {};
+  const record = closures[month] || {};
+  const closed = Boolean(record.closed);
   return {
-    month: normalizedMonth,
-    closed: raw.closed === true,
-    closedAt: raw.closedAt || null,
-    managerialComment: raw.managerialComment || '',
-    reopenedAt: raw.reopenedAt || null,
-    history,
+    month,
+    closed,
+    closedAt: record.closedAt || null,
+    managerialComment: String(record.managerialComment || ''),
+    reopenedAt: record.reopenedAt || null,
   };
-}
-
-function isMonthClosed(companyData, month) {
-  return getMonthClosure(companyData, month).closed;
 }
 
 function assertMonthOpen(companyData, month, actionLabel) {
-  if (isMonthClosed(companyData, month)) {
-    throw new Error(`El mes ${month} está cerrado. Reábrelo antes de ${actionLabel}.`);
+  const { closed } = getMonthClosure(companyData, month);
+  if (closed) {
+    throw new Error(
+      `No puedes ${actionLabel} porque el mes ${month} estï¿½ cerrado. Reabre el mes o elige otro periodo.`
+    );
   }
 }
 
-function closeMonth(companyData, month, managerialComment) {
-  const normalizedMonth = ensureMonth(month);
-  const current = getMonthClosure(companyData, normalizedMonth);
+function closeMonth(mutableCompanyData, month, managerialComment) {
+  mutableCompanyData.monthClosures = mutableCompanyData.monthClosures || {};
   const now = new Date().toISOString();
-
-  companyData.monthClosures = companyData.monthClosures || {};
-  companyData.monthClosures[normalizedMonth] = {
-    month: normalizedMonth,
+  mutableCompanyData.monthClosures[month] = {
     closed: true,
     closedAt: now,
-    managerialComment,
-    reopenedAt: current.reopenedAt || null,
-    history: [
-      ...(current.history || []),
-      {
-        eventType: 'close_month',
-        dateTime: now,
-        managerialComment,
-      },
-    ],
+    managerialComment: String(managerialComment || '').trim(),
+    reopenedAt: null,
   };
-
-  return companyData.monthClosures[normalizedMonth];
+  return getMonthClosure(mutableCompanyData, month);
 }
 
-function reopenMonth(companyData, month) {
-  const normalizedMonth = ensureMonth(month);
-  const current = getMonthClosure(companyData, normalizedMonth);
+function reopenMonth(mutableCompanyData, month) {
+  mutableCompanyData.monthClosures = mutableCompanyData.monthClosures || {};
+  const prev = mutableCompanyData.monthClosures[month] || {};
   const now = new Date().toISOString();
-
-  companyData.monthClosures = companyData.monthClosures || {};
-  companyData.monthClosures[normalizedMonth] = {
-    ...current,
-    month: normalizedMonth,
+  mutableCompanyData.monthClosures[month] = {
+    ...prev,
     closed: false,
     reopenedAt: now,
-    history: [
-      ...(current.history || []),
-      {
-        eventType: 'reopen_month',
-        dateTime: now,
-      },
-    ],
   };
-
-  return companyData.monthClosures[normalizedMonth];
+  return getMonthClosure(mutableCompanyData, month);
 }
 
-function findPreviousBudgetMonth(companyData, targetMonth) {
-  const normalizedTarget = ensureMonth(targetMonth);
-  return Object.keys(companyData?.months || {})
-    .filter((month) => month < normalizedTarget && companyData.months?.[month]?.budget?.rows?.length)
-    .sort((a, b) => b.localeCompare(a, 'es'))[0] || null;
-}
-
-function sortActions(items, direction = 'asc') {
-  return items.slice().sort((a, b) => {
-    const compare = String(a.dueDate || '').localeCompare(String(b.dueDate || ''), 'es');
-    if (compare !== 0) {
-      return direction === 'asc' ? compare : -compare;
+function findPreviousBudgetMonth(companyData, normalizedMonth) {
+  const keys = Object.keys(companyData.months || {})
+    .filter((m) => m < normalizedMonth)
+    .sort()
+    .reverse();
+  for (const m of keys) {
+    const rows = companyData.months[m]?.budget?.rows;
+    if (Array.isArray(rows) && rows.length > 0) {
+      return m;
     }
-    return String(a.companyName || '').localeCompare(String(b.companyName || ''), 'es');
-  });
+  }
+  return null;
 }
 
-function buildActionTracking(companyName, month, action, todayKey = getTodayLocalDateKey()) {
-  const status = ['pendiente', 'en_proceso', 'cerrada'].includes(action?.status) ? action.status : 'pendiente';
-  const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(String(action?.dueDate || '').trim())
-    ? String(action.dueDate).trim()
-    : '';
-  const nextWeekKey = addDaysToDateKey(todayKey, 7);
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
 
-  let trackingBucket = 'pending';
-  if (status === 'cerrada') {
-    trackingBucket = 'closed';
-  } else if (dueDate && dueDate < todayKey) {
-    trackingBucket = 'overdue';
-  } else if (dueDate && dueDate >= todayKey && dueDate <= nextWeekKey) {
-    trackingBucket = 'dueSoon';
-  } else if (status === 'en_proceso') {
-    trackingBucket = 'inProgress';
-  }
+function parseDueDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : startOfDay(d);
+}
 
+function enrichAction(action, companyName, monthKey) {
+  const due = parseDueDate(action.dueDate);
+  const missingDueDate = !String(action.dueDate || '').trim();
+  const dueDateLabel = missingDueDate ? 'Sin fecha' : String(action.dueDate);
   return {
-    id: String(action?.id || '').trim(),
+    ...action,
     companyName,
-    month,
-    linePyg: String(action?.linePyg || '').trim() || 'Sin línea',
-    problemDetected: String(action?.problemDetected || '').trim() || 'Sin problema registrado',
-    actionDefined: String(action?.actionDefined || '').trim() || 'Sin acción definida',
-    responsible: String(action?.responsible || '').trim() || 'Sin responsable',
-    priority: String(action?.priority || '').trim() || 'Media',
-    dueDate,
-    dueDateLabel: dueDate || 'Sin fecha compromiso',
-    status,
-    trackingBucket,
-    missingDueDate: !dueDate,
-    dateTime: action?.dateTime || null,
+    month: monthKey,
+    dueDateLabel,
+    missingDueDate,
+    _due: due,
   };
 }
 
-function buildActionsOverview(companiesWithData, filters = {}) {
-  const monthFilter = filters.month ? ensureMonth(filters.month) : '';
-  const todayKey = filters.todayKey || getTodayLocalDateKey();
-  const allItems = [];
-
-  companiesWithData.forEach(({ companyName, companyData }) => {
-    const monthlyActions = companyData?.monthlyActions || {};
-    Object.keys(monthlyActions).forEach((month) => {
-      if (monthFilter && month !== monthFilter) return;
-      const actions = Array.isArray(monthlyActions[month]) ? monthlyActions[month] : [];
-      actions.forEach((action) => {
-        allItems.push(buildActionTracking(companyName, month, action, todayKey));
+function buildActionsOverview(companyEntries, { month: filterMonth } = {}) {
+  const all = [];
+  companyEntries.forEach(({ companyName, companyData }) => {
+    const actionsByMonth = companyData.monthlyActions || {};
+    Object.keys(actionsByMonth).forEach((monthKey) => {
+      if (filterMonth && monthKey !== filterMonth) return;
+      const rows = Array.isArray(actionsByMonth[monthKey]) ? actionsByMonth[monthKey] : [];
+      rows.forEach((row) => {
+        all.push(enrichAction(row, companyName, monthKey));
       });
     });
   });
 
-  const sections = {
-    overdue: sortActions(allItems.filter((item) => item.trackingBucket === 'overdue')),
-    dueSoon: sortActions(allItems.filter((item) => item.trackingBucket === 'dueSoon')),
-    pending: sortActions(allItems.filter((item) => item.status === 'pendiente')),
-    inProgress: sortActions(allItems.filter((item) => item.status === 'en_proceso')),
-    closed: sortActions(allItems.filter((item) => item.status === 'cerrada'), 'desc'),
-    incomplete: sortActions(allItems.filter((item) => item.missingDueDate && item.status !== 'cerrada')),
-  };
+  const today = startOfDay(new Date());
+  const weekAhead = new Date(today);
+  weekAhead.setDate(weekAhead.getDate() + 7);
+
+  const overdue = [];
+  const dueSoon = [];
+  const incomplete = [];
+  const pending = [];
+  const inProgress = [];
+
+  all.forEach((item) => {
+    if (item.status === 'cerrada') return;
+    const due = item._due;
+    if (due && due < today) {
+      overdue.push(item);
+      return;
+    }
+    if (due && due >= today && due <= weekAhead) {
+      dueSoon.push(item);
+      return;
+    }
+    if (item.missingDueDate) {
+      incomplete.push(item);
+      return;
+    }
+    if (item.status === 'en_proceso') {
+      inProgress.push(item);
+      return;
+    }
+    pending.push(item);
+  });
+
+  const strip = (rows) =>
+    rows.map(({ _due, ...rest }) => rest);
 
   return {
-    filters: {
-      month: monthFilter || null,
-      today: todayKey,
-    },
     summary: {
-      overdue: sections.overdue.length,
-      dueSoon: sections.dueSoon.length,
-      pending: sections.pending.length,
-      inProgress: sections.inProgress.length,
-      closed: sections.closed.length,
-      incomplete: sections.incomplete.length,
-      total: allItems.length,
+      overdue: overdue.length,
+      dueSoon: dueSoon.length,
+      incomplete: incomplete.length,
+      pending: pending.length,
+      inProgress: inProgress.length,
     },
-    sections,
+    sections: {
+      overdue: strip(overdue),
+      dueSoon: strip(dueSoon),
+      incomplete: strip(incomplete),
+      pending: strip(pending),
+      inProgress: strip(inProgress),
+    },
   };
 }
 
 module.exports = {
   getMonthClosure,
-  isMonthClosed,
   assertMonthOpen,
   closeMonth,
   reopenMonth,

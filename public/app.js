@@ -1,47 +1,6 @@
-﻿const state = {
-  month: '',
-  meta: null,
-  companies: [],
-  activeCompanyId: '',
-  executionUpload: null,
-  budgetUpload: null,
-  analysis: null,
-  trend: [],
-  lineSettings: [],
-  notes: [],
-  actions: [],
-  monthStatus: null,
-  actionsOverview: null,
-  pendingExecutionProcess: null,
-  pendingBudgetProcess: null,
-  activeView: 'dashboard',
-  availableMonths: [],
-  workspaceBooted: false,
-  auth: {
-    authenticated: false,
-    user: null,
-    csrfToken: '',
-    setupRequired: false,
-    setupMode: 'disabled',
-    setupTokenConfigured: false,
-  },
-};
-
-const executionMappingFields = ['account', 'accountName', 'balance', 'debit', 'credit'];
-const budgetMappingFields = ['line', 'budget', 'comment'];
-const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-const numberFormatter = new Intl.NumberFormat('es-CO', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+﻿import { state } from './js/state.js';
+import { executionMappingFields, budgetMappingFields, SAFE_HTTP_METHODS, viewTitles } from './js/constants.js';
+import { formatCurrency, formatNumber, parseLocalizedNumber, escapeHtml } from './js/formatters.js';
 
 const authScreen = document.getElementById('auth-screen');
 const authTitle = document.getElementById('auth-title');
@@ -64,7 +23,7 @@ if (monthInput) {
 const btnRefresh = document.getElementById('btn-refresh');
 const globalMessage = document.getElementById('global-message');
 const workspaceTitle = document.getElementById('workspace-title');
-const topbarCompanyName = document.getElementById('topbar-company-name');
+const topbarCompanySelect = document.getElementById('topbar-company-select');
 const authUserLabel = document.getElementById('auth-user-label');
 const btnLogout = document.getElementById('btn-logout');
 
@@ -142,6 +101,39 @@ const analysisDetailed = document.getElementById('analysis-detailed');
 const analysisAdjustments = document.getElementById('analysis-adjustments');
 const analysisMapping = document.getElementById('analysis-mapping');
 const exportLink = document.getElementById('export-link');
+const accumulatedMode = document.getElementById('accumulated-mode');
+const accumulatedSummary = document.getElementById('accumulated-summary');
+const accumulatedStandard = document.getElementById('accumulated-standard');
+const accumulatedComparison = document.getElementById('accumulated-comparison');
+const accumulatedDetailed = document.getElementById('accumulated-detailed');
+const accumulatedNotes = document.getElementById('accumulated-notes');
+const accumulatedMapping = document.getElementById('accumulated-mapping');
+const accumulatedExportLink = document.getElementById('accumulated-export-link');
+const accumulatedExecutive = document.getElementById('accumulated-executive');
+const consolidatedPeriodMode = document.getElementById('consolidated-period-mode');
+const consolidatedMode = document.getElementById('consolidated-mode');
+const consolidatedView = document.getElementById('consolidated-view');
+const consolidatedGroupSelect = document.getElementById('consolidated-group-select');
+const consolidatedGroupName = document.getElementById('consolidated-group-name');
+const btnSaveCompanyGroup = document.getElementById('btn-save-company-group');
+const btnDeleteCompanyGroup = document.getElementById('btn-delete-company-group');
+const btnLoadConsolidated = document.getElementById('btn-load-consolidated');
+const consolidatedCompanySelector = document.getElementById('consolidated-company-selector');
+const consolidatedSummary = document.getElementById('consolidated-summary');
+const consolidatedStandard = document.getElementById('consolidated-standard');
+const consolidatedAdjusted = document.getElementById('consolidated-adjusted');
+const consolidatedDetailed = document.getElementById('consolidated-detailed');
+const consolidatedComparison = document.getElementById('consolidated-comparison');
+const consolidatedNotes = document.getElementById('consolidated-notes');
+const consolidatedExportLink = document.getElementById('consolidated-export-link');
+const eliminationSourceCompany = document.getElementById('elimination-source-company');
+const eliminationTargetCompany = document.getElementById('elimination-target-company');
+const eliminationLineKey = document.getElementById('elimination-line-key');
+const eliminationType = document.getElementById('elimination-type');
+const eliminationValue = document.getElementById('elimination-value');
+const eliminationDescription = document.getElementById('elimination-description');
+const btnSaveElimination = document.getElementById('btn-save-elimination');
+const consolidatedEliminations = document.getElementById('consolidated-eliminations');
 
 const trendChart = document.getElementById('trend-chart');
 const trendTable = document.getElementById('trend-table');
@@ -157,68 +149,27 @@ const currentPasswordInput = document.getElementById('current-password');
 const newPasswordInput = document.getElementById('new-password');
 const newPasswordConfirmInput = document.getElementById('new-password-confirm');
 const changePasswordMessage = document.getElementById('change-password-message');
+const loginMfaForm = document.getElementById('login-mfa-form');
+const loginMfaCodeInput = document.getElementById('login-mfa-code');
+const btnLoginMfaCancel = document.getElementById('btn-login-mfa-cancel');
+const mfaStatusText = document.getElementById('mfa-status-text');
+const mfaOtpauthWrap = document.getElementById('mfa-otpauth-wrap');
+const mfaOtpauthLink = document.getElementById('mfa-otpauth-link');
+const mfaSecretDisplay = document.getElementById('mfa-secret-display');
+const mfaSetupCodeInput = document.getElementById('mfa-setup-code');
+const btnMfaBegin = document.getElementById('btn-mfa-begin');
+const btnMfaCancelSetup = document.getElementById('btn-mfa-cancel-setup');
+const btnMfaComplete = document.getElementById('btn-mfa-complete');
+const mfaDisablePasswordInput = document.getElementById('mfa-disable-password');
+const mfaDisableCodeInput = document.getElementById('mfa-disable-code');
+const btnMfaDisable = document.getElementById('btn-mfa-disable');
+const mfaSettingsMessage = document.getElementById('mfa-settings-message');
 
-const viewTitles = {
-  dashboard: 'Dashboard',
-  empresas: 'Empresas',
-  ejecucion: 'Ejecución',
-  presupuesto: 'Presupuesto',
-  analisis: 'Análisis mensual',
-  historico: 'Histórico',
-  acciones: 'Acciones',
-  bitacora: 'Bitácora',
-  configuracion: 'Configuración',
-};
-
-function formatCurrency(value) {
-  return currencyFormatter.format(Number(value || 0));
-}
-
-function formatNumber(value) {
-  return numberFormatter.format(Number(value || 0));
-}
+let pendingMfaChallengeId = '';
+let authLoginStep = 'password';
 
 function getActiveCompany() {
   return (state.companies || []).find((company) => company.id === state.activeCompanyId) || null;
-}
-
-function parseLocalizedNumber(value) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return 0;
-  }
-
-  const cleaned = raw.replace(/\s/g, '').replace(/\$/g, '').replace(/[^\d.,-]/g, '');
-  if (!cleaned) {
-    return 0;
-  }
-
-  const hasComma = cleaned.includes(',');
-  const hasDot = cleaned.includes('.');
-  let normalized = cleaned;
-
-  if (hasComma && hasDot) {
-    normalized = cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')
-      ? cleaned.replace(/\./g, '').replace(',', '.')
-      : cleaned.replace(/,/g, '');
-  } else if (hasComma) {
-    const parts = cleaned.split(',');
-    normalized = parts.length === 2 && parts[1].length <= 2
-      ? cleaned.replace(',', '.')
-      : cleaned.replace(/,/g, '');
-  } else if (hasDot) {
-    const parts = cleaned.split('.');
-    normalized = parts.length === 2 && parts[1].length <= 2
-      ? cleaned
-      : cleaned.replace(/\./g, '');
-  }
-
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function setGlobalMessage(text, isError = false) {
@@ -238,28 +189,35 @@ function setChangePasswordMessage(text, isError = false) {
   changePasswordMessage.classList.toggle('error-text', Boolean(isError));
 }
 
+function setMfaSettingsMessage(text, isError = false) {
+  if (!mfaSettingsMessage) return;
+  mfaSettingsMessage.textContent = text || '';
+  mfaSettingsMessage.classList.toggle('error-text', Boolean(isError));
+}
+
+function refreshMfaSettingsUi() {
+  if (!mfaStatusText) return;
+  const enabled = Boolean(state.auth.user?.mfaEnabled);
+  mfaStatusText.textContent = enabled
+    ? 'MFA está activo para tu usuario.'
+    : 'MFA no está activo. Actívalo para exigir código TOTP al iniciar sesión.';
+}
+
 function setAuthMessage(text, isError = false) {
   if (!authMessage) return;
   authMessage.textContent = text || '';
   authMessage.classList.toggle('error-text', Boolean(isError));
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 function renderAuthUser() {
   if (!authUserLabel) return;
   const user = state.auth.user;
-  authUserLabel.textContent = user ? ((user.displayName || user.email) + ' · ' + user.email) : 'Sin sesión';
+  const roleLabel = user?.role ? ' · rol ' + user.role : '';
+  authUserLabel.textContent = user ? ((user.displayName || user.email) + ' · ' + user.email + roleLabel) : 'Sin sesión';
   if (btnLogout) {
     btnLogout.disabled = !state.auth.authenticated;
   }
+  refreshMfaSettingsUi();
 }
 
 function syncSecurityForms() {
@@ -273,9 +231,12 @@ function syncSecurityForms() {
 
 function resetAuthForms() {
   if (loginForm) loginForm.reset();
+  if (loginMfaForm) loginMfaForm.reset();
   if (setupForm) setupForm.reset();
   if (changeProfileForm) changeProfileForm.reset();
   if (changePasswordForm) changePasswordForm.reset();
+  pendingMfaChallengeId = '';
+  authLoginStep = 'password';
   setChangeProfileMessage('');
   setChangePasswordMessage('');
   syncSecurityForms();
@@ -302,29 +263,40 @@ function setAuthMode() {
   lockWorkspaceForAuth();
 
   const setupRequired = Boolean(state.auth.setupRequired);
-  loginForm.classList.toggle('hidden', setupRequired);
-  setupForm.classList.toggle('hidden', !setupRequired);
-
-  if (!setupRequired) {
-    authTitle.textContent = 'Iniciar sesión';
-    if (!authMessage.textContent.trim()) {
-      setAuthMessage('Ingresa con tu cuenta de administrador para usar la aplicación.');
+  if (setupRequired) {
+    loginForm.classList.add('hidden');
+    if (loginMfaForm) loginMfaForm.classList.add('hidden');
+    setupForm.classList.remove('hidden');
+    authTitle.textContent = 'Configurar administrador';
+    if (state.auth.setupMode === 'local') {
+      setAuthMessage('No hay usuarios aún. Crea el administrador inicial desde este equipo local.');
+    } else if (state.auth.setupMode === 'token') {
+      setAuthMessage('No hay usuarios aún. Ingresa el token de configuración y crea el administrador inicial.');
+    } else {
+      setAuthMessage('No hay usuarios configurados. Define AUTH_INITIAL_EMAIL/AUTH_INITIAL_PASSWORD o AUTH_SETUP_TOKEN en el servidor.', true);
+    }
+    if (setupTokenInput) {
+      setupTokenInput.disabled = state.auth.setupMode !== 'token';
+      setupTokenInput.required = state.auth.setupMode === 'token';
     }
     return;
   }
 
-  authTitle.textContent = 'Configurar administrador';
-  if (state.auth.setupMode === 'local') {
-    setAuthMessage('No hay usuarios aún. Crea el administrador inicial desde este equipo local.');
-  } else if (state.auth.setupMode === 'token') {
-    setAuthMessage('No hay usuarios aún. Ingresa el token de configuración y crea el administrador inicial.');
-  } else {
-    setAuthMessage('No hay usuarios configurados. Define AUTH_INITIAL_EMAIL/AUTH_INITIAL_PASSWORD o AUTH_SETUP_TOKEN en el servidor.', true);
+  setupForm.classList.add('hidden');
+  if (authLoginStep === 'mfa' && pendingMfaChallengeId && loginMfaForm) {
+    loginForm.classList.add('hidden');
+    loginMfaForm.classList.remove('hidden');
+    authTitle.textContent = 'Verificación en dos pasos';
+    return;
   }
 
-  if (setupTokenInput) {
-    setupTokenInput.disabled = state.auth.setupMode !== 'token';
-    setupTokenInput.required = state.auth.setupMode === 'token';
+  authLoginStep = 'password';
+  pendingMfaChallengeId = '';
+  if (loginMfaForm) loginMfaForm.classList.add('hidden');
+  loginForm.classList.remove('hidden');
+  authTitle.textContent = 'Iniciar sesión';
+  if (!authMessage.textContent.trim()) {
+    setAuthMessage('Ingresa con tu cuenta de administrador para usar la aplicación.');
   }
 }
 
@@ -570,7 +542,40 @@ function renderBudgetModule(budget) {
   }
 }
 
+function renderTopbarCompanySelect() {
+  if (!topbarCompanySelect) return;
+  const companies = state.companies || [];
+  topbarCompanySelect.innerHTML = companies.length
+    ? companies
+        .map(
+          (company) =>
+            `<option value="${escapeHtml(company.id)}">${escapeHtml(company.name)}</option>`
+        )
+        .join('')
+    : '<option value="">Sin empresas</option>';
+
+  if (state.activeCompanyId && companies.some((company) => company.id === state.activeCompanyId)) {
+    topbarCompanySelect.value = state.activeCompanyId;
+  } else {
+    topbarCompanySelect.value = companies[0]?.id || '';
+  }
+  topbarCompanySelect.disabled = !companies.length;
+}
+
+async function applyActiveCompanyChange(companyId) {
+  if (!companyId || companyId === state.activeCompanyId) return;
+  state.activeCompanyId = companyId;
+  renderCompanyTabs();
+  updateActiveCompanyLabel();
+  await loadAvailableMonths().catch(() => { state.availableMonths = []; });
+  monthInput.value = resolveInitialMonth();
+  state.month = selectedMonth();
+  updateBudgetTemplateLink();
+  await loadMonthData();
+}
+
 function renderCompanyTabs() {
+  if (!companyTabs) return;
   companyTabs.innerHTML = state.companies
     .map((company) => {
       const activeClass = company.id === state.activeCompanyId ? 'active' : '';
@@ -580,16 +585,8 @@ function renderCompanyTabs() {
 
   Array.from(companyTabs.querySelectorAll('.tab-btn')).forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const companyId = btn.getAttribute('data-company-id');
-      if (companyId === state.activeCompanyId) return;
-      state.activeCompanyId = companyId;
-      renderCompanyTabs();
-      updateActiveCompanyLabel();
-      await loadAvailableMonths().catch(() => { state.availableMonths = []; });
-      monthInput.value = resolveInitialMonth();
-      state.month = selectedMonth();
-      updateBudgetTemplateLink();
-      await loadMonthData();
+      const id = btn.getAttribute('data-company-id');
+      await applyActiveCompanyChange(id);
     });
   });
 }
@@ -623,28 +620,34 @@ function setActiveView(viewName, syncHash = true) {
   }
 }
 
+async function syncViewData(viewName) {
+  if (viewName === 'acumulado') {
+    await loadAccumulatedData();
+  } else if (viewName === 'consolidado') {
+    await loadConsolidatedData();
+  }
+}
+
 function bindNavigation() {
   navButtons.forEach((button) => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       const nextView = button.getAttribute('data-nav-view');
       setActiveView(nextView);
+      await syncViewData(nextView).catch(() => {});
     });
   });
 
-  window.addEventListener('hashchange', () => {
+  window.addEventListener('hashchange', async () => {
     const hashView = window.location.hash.replace('#', '').trim();
     if (viewTitles[hashView] && hashView !== state.activeView) {
       setActiveView(hashView, false);
+      await syncViewData(hashView).catch(() => {});
     }
   });
 }
 
 function updateTopbarContext() {
-  const activeCompany = getActiveCompany();
-
-  if (topbarCompanyName) {
-    topbarCompanyName.textContent = activeCompany ? activeCompany.name : 'Sin empresa activa';
-  }
+  renderTopbarCompanySelect();
 }
 
 function updateActiveCompanyLabel() {
@@ -733,6 +736,70 @@ async function loadCompanies(preserveActive = true) {
   updateActivePeriodHints();
   updateBudgetTemplateLink();
   updateProcessButtonsState();
+  renderConsolidatedCompanySelector();
+}
+
+async function loadCompanyGroups() {
+  const payload = await api('/api/company-groups');
+  state.companyGroups = payload.groups || [];
+  renderCompanyGroups();
+}
+
+function getSelectedConsolidatedCompanyIds() {
+  if (!consolidatedCompanySelector) return [];
+  return Array.from(consolidatedCompanySelector.querySelectorAll('input[type="checkbox"]:checked'))
+    .map((input) => input.value)
+    .filter(Boolean);
+}
+
+function applyGroupSelection(groupId) {
+  if (!consolidatedCompanySelector) return;
+  const group = (state.companyGroups || []).find((item) => item.id === groupId);
+  const companyIds = group ? group.companyIds : [];
+  Array.from(consolidatedCompanySelector.querySelectorAll('input[type="checkbox"]')).forEach((input) => {
+    input.checked = companyIds.includes(input.value);
+  });
+  if (consolidatedGroupName) {
+    consolidatedGroupName.value = group?.name || '';
+  }
+}
+
+function renderConsolidatedCompanySelector() {
+  if (!consolidatedCompanySelector) return;
+  consolidatedCompanySelector.innerHTML = (state.companies || []).map((company) => `
+    <label class="company-selector-item">
+      <input type="checkbox" value="${escapeHtml(company.id)}" />
+      <span>${escapeHtml(company.name)}</span>
+    </label>
+  `).join('');
+
+  Array.from(consolidatedCompanySelector.querySelectorAll('input[type="checkbox"]')).forEach((input) => {
+    input.addEventListener('change', () => {
+      if (consolidatedGroupSelect) {
+        consolidatedGroupSelect.value = '';
+      }
+      if (consolidatedGroupName) {
+        consolidatedGroupName.value = '';
+      }
+    });
+  });
+}
+
+function renderCompanyGroups() {
+  if (!consolidatedGroupSelect) return;
+
+  consolidatedGroupSelect.innerHTML = '<option value="">Selección manual</option>' +
+    (state.companyGroups || []).map((group) => `<option value="${group.id}">${escapeHtml(group.name)}</option>`).join('');
+}
+
+function renderEliminationSelectors() {
+  const companies = (state.consolidated?.companies || []).filter((company) => company.hasExecution);
+  const companyOptions = '<option value="">No aplica</option>' + companies.map((company) => `<option value="${company.id}">${escapeHtml(company.name)}</option>`).join('');
+  if (eliminationSourceCompany) eliminationSourceCompany.innerHTML = companyOptions;
+  if (eliminationTargetCompany) eliminationTargetCompany.innerHTML = companyOptions;
+
+  const lines = (state.meta?.pygLines || []).map((line) => `<option value="${line.key}">${escapeHtml(line.label)}</option>`).join('');
+  if (eliminationLineKey) eliminationLineKey.innerHTML = '<option value="">Selecciona una línea</option>' + lines;
 }
 
 function renderKpis(comparison, summary) {
@@ -1139,6 +1206,368 @@ function renderAnalysis(payload) {
   renderBudgetModule(payload.budget);
 }
 
+function renderPygBlocks(target, titleLeft, rowsLeft, titleRight, rowsRight) {
+  if (!target) return;
+
+  const buildRows = (rows) => {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    if (!safeRows.length) {
+      return '<p class="muted">Sin datos disponibles.</p>';
+    }
+
+    return '<div class="table-wrap"><table><thead><tr><th>Línea</th><th>Valor</th></tr></thead><tbody>' +
+      safeRows.map((row) => (
+        '<tr><td>' + escapeHtml(row.lineLabel || row.sectionLabel || '-') + '</td><td>' + formatCurrency(row.value ?? row.budget ?? 0) + '</td></tr>'
+      )).join('') +
+      '</tbody></table></div>';
+  };
+
+  target.innerHTML =
+    '<div class="analysis-grid-2">' +
+      '<article><h4>' + escapeHtml(titleLeft) + '</h4>' + buildRows(rowsLeft) + '</article>' +
+      '<article><h4>' + escapeHtml(titleRight) + '</h4>' + buildRows(rowsRight) + '</article>' +
+    '</div>';
+}
+
+function renderAccumulated(dataset) {
+  state.accumulated = dataset || null;
+  const mode = accumulatedMode ? accumulatedMode.value : 'real_vs_budget';
+  const budget = dataset?.budget || null;
+
+  if (!dataset) {
+    if (accumulatedSummary) accumulatedSummary.innerHTML = '<p class="muted">Sin acumulado disponible.</p>';
+    if (accumulatedStandard) accumulatedStandard.innerHTML = '';
+    if (accumulatedComparison) accumulatedComparison.innerHTML = '';
+    if (accumulatedDetailed) accumulatedDetailed.innerHTML = '';
+    if (accumulatedNotes) accumulatedNotes.innerHTML = '';
+    if (accumulatedMapping) accumulatedMapping.innerHTML = '';
+    if (accumulatedExecutive) accumulatedExecutive.innerHTML = '';
+    if (accumulatedExportLink) accumulatedExportLink.classList.add('disabled');
+    return;
+  }
+
+  if (accumulatedExecutive) {
+    const ex = dataset.executiveSummary || {};
+    const bc = ex.budgetComparison || {};
+    const top = bc.topUnfavorableLines || [];
+    const compliance = bc.compliancePct != null ? formatNumber(bc.compliancePct) + '%' : 'N/D';
+    accumulatedExecutive.innerHTML =
+      '<p class="muted">' + escapeHtml(ex.periodLabel || '') + ' · ' + escapeHtml(String(ex.totalMonthsWithExecution || 0)) + ' meses con ejecución cargada.</p>' +
+      '<div class="kpi-grid" style="margin-top:0.75rem">' +
+        '<article class="kpi"><small>Cumplimiento (líneas P&amp;G)</small><strong>' + escapeHtml(compliance) + '</strong></article>' +
+        '<article class="kpi"><small>Comparativo presupuesto</small><strong>' + escapeHtml(bc.enabled ? 'Activo' : 'No disponible') + '</strong></article>' +
+      '</div>' +
+      (top.length
+        ? '<h4 style="margin-top:1rem">Principales desvíos desfavorables</h4><div class="table-wrap"><table><thead><tr><th>Línea</th><th>Real</th><th>Presup.</th><th>Var %</th><th>Estado</th></tr></thead><tbody>' +
+          top.map((r) => '<tr><td>' + escapeHtml(r.lineLabel || '') + '</td><td>' + formatCurrency(r.real) + '</td><td>' + formatCurrency(r.budget) + '</td><td>' + formatNumber(r.variationPct) + '%</td><td>' + escapeHtml(r.status || '') + '</td></tr>').join('') +
+          '</tbody></table></div>'
+        : '<p class="muted" style="margin-top:0.75rem">' + (bc.enabled ? 'Sin desvíos desfavorables destacados o sin líneas evaluadas.' : 'Selecciona modo con presupuesto para ver cumplimiento YTD.') + '</p>');
+  }
+
+  if (accumulatedSummary) {
+    const cards = [
+      { label: 'Meses incluidos', value: formatNumber(dataset.summary?.totalMonths || 0) },
+      { label: 'Desde', value: dataset.period?.fromMonth || '-' },
+      { label: 'Utilidad contable YTD', value: formatCurrency(dataset.summary?.totalUtilityContable || 0) },
+      { label: 'Utilidad gerencial YTD', value: formatCurrency(dataset.summary?.totalUtilityGerencial || 0) },
+    ];
+
+    accumulatedSummary.innerHTML = cards.map((card) => (
+      '<article class="kpi"><small>' + escapeHtml(card.label) + '</small><strong>' + escapeHtml(card.value) + '</strong></article>'
+    )).join('');
+  }
+
+  renderPygBlocks(
+    accumulatedStandard,
+    mode === 'budget' ? 'Presupuesto contable acumulado' : 'Real contable acumulado',
+    mode === 'budget' ? (budget?.contable?.standardTable || []) : (dataset.execution?.contable?.standardTable || []),
+    mode === 'budget' ? 'Presupuesto gerencial acumulado' : 'Real gerencial acumulado',
+    mode === 'budget' ? (budget?.gerencial?.standardTable || []) : (dataset.execution?.gerencial?.standardTable || [])
+  );
+
+  if (accumulatedComparison) {
+    if (mode === 'real') {
+      accumulatedComparison.innerHTML = '<p class="muted">Activa presupuesto para ver el comparativo acumulado real vs presupuesto.</p>';
+    } else if (!dataset.comparison?.rows?.length) {
+      accumulatedComparison.innerHTML = '<p class="muted">No hay presupuesto acumulado suficiente para comparar este corte.</p>';
+    } else {
+      renderTable(accumulatedComparison, dataset.comparison.rows, [
+        { key: 'lineLabel', label: 'Línea' },
+        { key: 'budget', label: 'Presupuesto', currency: true },
+        { key: 'real', label: 'Real', currency: true },
+        { key: 'variation', label: 'Variación', currency: true },
+        { key: 'variationPct', label: 'Variación %', percent: true },
+        { key: 'status', label: 'Estado', badge: true },
+      ]);
+    }
+  }
+
+  const detailedContable = mode === 'budget' ? (budget?.contable?.detailedTable || []) : (dataset.execution?.contable?.detailedTable || []);
+  const detailedGerencial = mode === 'budget' ? (budget?.gerencial?.detailedTable || []) : (dataset.execution?.gerencial?.detailedTable || []);
+
+  if (accumulatedDetailed) {
+    const buildDetailed = (rows) => {
+      if (!rows.length) {
+        return '<p class="muted">Sin detalle disponible.</p>';
+      }
+
+      return '<div class="table-wrap"><table><thead><tr><th>Sección</th><th>Subgrupo</th><th>Valor</th><th>Cuentas</th></tr></thead><tbody>' +
+        rows.map((row) => (
+          '<tr><td>' + escapeHtml(row.sectionLabel || '-') + '</td><td>' + escapeHtml(row.subgroup || '-') + '</td><td>' + formatCurrency(row.value || 0) + '</td><td>' + escapeHtml(formatNumber(row.accountCount || 0)) + '</td></tr>'
+        )).join('') +
+        '</tbody></table></div>';
+    };
+
+    accumulatedDetailed.innerHTML =
+      '<div class="analysis-grid-2">' +
+        '<article><h4>' + escapeHtml(mode === 'budget' ? 'Detalle contable presupuestado' : 'Detalle contable real') + '</h4>' + buildDetailed(detailedContable) + '</article>' +
+        '<article><h4>' + escapeHtml(mode === 'budget' ? 'Detalle gerencial presupuestado' : 'Detalle gerencial real') + '</h4>' + buildDetailed(detailedGerencial) + '</article>' +
+      '</div>';
+  }
+
+  if (accumulatedNotes) {
+    const n = dataset.execution?.automaticNotes || {};
+    const sections = [
+      { title: 'Notas técnicas', items: n.technicalNotes },
+      { title: 'Advertencias de calidad', items: n.qualityWarnings },
+      { title: 'Exclusiones sugeridas', items: n.exclusionsSuggested },
+      { title: 'Reclasificaciones sugeridas', items: n.reclassificationsSuggested },
+      { title: 'Descripciones faltantes', items: n.missingDescriptions },
+    ];
+    const extraBudget = mode !== 'real' ? (budget?.notes || []) : [];
+    const hasAny = sections.some((s) => (s.items || []).length) || extraBudget.length;
+    accumulatedNotes.innerHTML = hasAny
+      ? sections.map((s) => (s.items || []).length
+        ? '<h4>' + escapeHtml(s.title) + '</h4><ul class="detail-list">' + s.items.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') + '</ul>'
+        : '').join('') +
+        (extraBudget.length ? '<h4>Notas de presupuesto</h4><ul class="detail-list">' + extraBudget.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') + '</ul>' : '')
+      : '<p class="muted">Sin notas acumuladas para este corte.</p>';
+  }
+
+  if (accumulatedMapping) {
+    renderTable(accumulatedMapping, dataset.execution?.accountMapping || [], [
+      { key: 'month', label: 'Mes' },
+      { key: 'account', label: 'Cuenta' },
+      { key: 'accountName', label: 'Nombre cuenta' },
+      { key: 'valorPyg', label: 'Valor P&G', currency: true },
+      { key: 'valorGerencial', label: 'Valor gerencial', currency: true },
+      { key: 'seccionPyg', label: 'Sección' },
+      { key: 'subgrupo', label: 'Subgrupo' },
+    ]);
+  }
+
+  if (accumulatedExportLink) {
+    const includeBudget = mode !== 'real';
+    accumulatedExportLink.href = companyQuery(`/api/export-accumulated/${state.month}?includeBudget=${String(includeBudget)}`);
+    accumulatedExportLink.classList.remove('disabled');
+  }
+}
+
+async function loadAccumulatedData() {
+  if (!state.activeCompanyId) {
+    return;
+  }
+
+  try {
+    const includeBudget = !accumulatedMode || accumulatedMode.value !== 'real';
+    const payload = await api(companyQuery(`/api/accumulated/${state.month}?includeBudget=${String(includeBudget)}`));
+    renderAccumulated(payload);
+  } catch (error) {
+    renderAccumulated(null);
+    if (accumulatedSummary) {
+      accumulatedSummary.innerHTML = '<p class="muted">' + escapeHtml(error.message) + '</p>';
+    }
+  }
+}
+
+function renderConsolidatedMatrix(target, dataset, kind = 'standard') {
+  if (!target) return;
+  const companies = dataset?.companies || [];
+  const source = kind === 'standard'
+    ? (dataset?.real?.standardMatrix || [])
+    : (dataset?.real?.detailedMatrix || []);
+  const budgetSource = kind === 'standard'
+    ? (dataset?.budget?.standardMatrix || [])
+    : (dataset?.budget?.detailedMatrix || []);
+  const mode = consolidatedMode ? consolidatedMode.value : 'real_vs_budget';
+  const activeRows = mode === 'budget' ? budgetSource : source;
+
+  if (!activeRows.length) {
+    target.innerHTML = '<p class="muted">Sin datos consolidados para mostrar.</p>';
+    return;
+  }
+
+  const header = kind === 'standard'
+    ? ['Línea', ...companies.map((company) => company.name), 'Total consolidado']
+    : ['Sección', 'Subgrupo', ...companies.map((company) => company.name), 'Total consolidado'];
+
+  const body = activeRows.map((row) => {
+    const companyValues = companies.map((company) => '<td>' + formatCurrency(row.valuesByCompany?.[company.id] || 0) + '</td>').join('');
+    if (kind === 'standard') {
+      return '<tr><td>' + escapeHtml(row.lineLabel || '-') + '</td>' + companyValues + '<td>' + formatCurrency(row.total || 0) + '</td></tr>';
+    }
+    return '<tr><td>' + escapeHtml(row.sectionLabel || '-') + '</td><td>' + escapeHtml(row.subgroup || '-') + '</td>' + companyValues + '<td>' + formatCurrency(row.total || 0) + '</td></tr>';
+  }).join('');
+
+  target.innerHTML = '<div class="table-wrap"><table><thead><tr>' + header.map((label) => '<th>' + escapeHtml(label) + '</th>').join('') + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+}
+
+function renderConsolidated(dataset) {
+  state.consolidated = dataset || null;
+  if (!dataset) {
+    if (consolidatedSummary) consolidatedSummary.innerHTML = '<p class="muted">Sin consolidado disponible.</p>';
+    if (consolidatedStandard) consolidatedStandard.innerHTML = '';
+    if (consolidatedAdjusted) consolidatedAdjusted.innerHTML = '';
+    if (consolidatedDetailed) consolidatedDetailed.innerHTML = '';
+    if (consolidatedComparison) consolidatedComparison.innerHTML = '';
+    if (consolidatedNotes) consolidatedNotes.innerHTML = '';
+    if (consolidatedEliminations) consolidatedEliminations.innerHTML = '';
+    if (consolidatedExportLink) consolidatedExportLink.classList.add('disabled');
+    return;
+  }
+
+  if (consolidatedSummary) {
+    const cards = [
+      { label: 'Empresas seleccionadas', value: formatNumber(dataset.summary?.totalCompanies || 0) },
+      { label: 'Con datos en consolidado', value: formatNumber(dataset.summary?.activeCompanies || 0) },
+      { label: 'Vista', value: dataset.summary?.view || '-' },
+    ];
+    if (dataset.periodType === 'ytd') {
+      cards.push({ label: 'Periodo', value: 'YTD' });
+      cards.push({ label: 'Corte', value: dataset.cutoffMonth || dataset.month || '-' });
+      cards.push({ label: 'Meses calendario', value: formatNumber(dataset.ytdPeriod?.months?.length || 0) });
+    } else {
+      cards.push({ label: 'Mes', value: dataset.month || '-' });
+    }
+    consolidatedSummary.innerHTML = cards.map((card) => '<article class="kpi"><small>' + escapeHtml(card.label) + '</small><strong>' + escapeHtml(card.value) + '</strong></article>').join('');
+  }
+
+  renderConsolidatedMatrix(consolidatedStandard, dataset, 'standard');
+  if (consolidatedAdjusted) {
+    renderTable(consolidatedAdjusted, dataset.real?.consolidated?.adjustedRowsWithEliminations || [], [
+      { key: 'lineLabel', label: 'Línea' },
+      { key: 'value', label: 'Antes eliminaciones', currency: true },
+      { key: 'eliminationValue', label: 'Eliminaciones', currency: true },
+      { key: 'adjustedValue', label: 'Consolidado ajustado', currency: true },
+    ]);
+  }
+  renderConsolidatedMatrix(consolidatedDetailed, dataset, 'detailed');
+
+  if (consolidatedComparison) {
+    if (consolidatedMode && consolidatedMode.value === 'real') {
+      consolidatedComparison.innerHTML = '<p class="muted">Activa presupuesto para ver el comparativo consolidado.</p>';
+    } else if (!dataset.comparison?.rows?.length) {
+      consolidatedComparison.innerHTML = '<p class="muted">No hay presupuesto consolidado suficiente para comparar este mes.</p>';
+    } else {
+      renderTable(consolidatedComparison, dataset.comparison.rows, [
+        { key: 'lineLabel', label: 'Línea' },
+        { key: 'budget', label: 'Presupuesto', currency: true },
+        { key: 'real', label: 'Real', currency: true },
+        { key: 'variation', label: 'Variación', currency: true },
+        { key: 'variationPct', label: 'Variación %', percent: true },
+        { key: 'status', label: 'Estado', badge: true },
+      ]);
+    }
+  }
+
+  if (consolidatedNotes) {
+    const notes = [
+      ...(dataset.summary?.missingExecutionCompanies?.length ? ['Empresas sin ejecución en el corte: ' + dataset.summary.missingExecutionCompanies.join(', ')] : []),
+      ...(dataset.eliminations?.total ? ['Total eliminaciones internas: ' + formatCurrency(dataset.eliminations.total)] : []),
+      ...(dataset.notes || []),
+    ];
+    consolidatedNotes.innerHTML = notes.length
+      ? '<ul class="detail-list">' + notes.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') + '</ul>'
+      : '<p class="muted">Sin notas para este consolidado.</p>';
+  }
+
+  if (consolidatedExportLink) {
+    const includeBudget = !consolidatedMode || consolidatedMode.value !== 'real';
+    const groupId = consolidatedGroupSelect?.value ? '&groupId=' + encodeURIComponent(consolidatedGroupSelect.value) : '';
+    const companyIds = getSelectedConsolidatedCompanyIds().join(',');
+    const ytd = consolidatedPeriodMode?.value === 'ytd';
+    const exportPath = ytd ? `/api/export-consolidated-ytd/${state.month}` : `/api/export-consolidated/${state.month}`;
+    consolidatedExportLink.href = `${exportPath}?view=${encodeURIComponent(consolidatedView?.value || 'gerencial')}&includeBudget=${String(includeBudget)}${groupId}&companyIds=${encodeURIComponent(companyIds)}`;
+    consolidatedExportLink.classList.remove('disabled');
+  }
+
+  if (consolidatedEliminations) {
+    const items = dataset.eliminations?.items || [];
+    if (!items.length) {
+      consolidatedEliminations.innerHTML = '<p class="muted">Sin eliminaciones registradas para este consolidado.</p>';
+    } else {
+      consolidatedEliminations.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Mes</th><th>Tipo</th><th>Línea</th><th>Descripción</th><th>Valor</th><th></th></tr></thead><tbody>' +
+        items.map((item) => (
+          '<tr>' +
+            '<td>' + escapeHtml(item.sourceYtdMonth || item.month || '-') + '</td>' +
+            '<td>' + escapeHtml(item.eliminationType || '-') + '</td>' +
+            '<td>' + escapeHtml(item.lineLabel || item.lineKey || '-') + '</td>' +
+            '<td>' + escapeHtml(item.description || '-') + '</td>' +
+            '<td>' + formatCurrency(item.value || 0) + '</td>' +
+            '<td><button class="btn btn-danger btn-small" type="button" data-elimination-id="' + escapeHtml(item.id) + '">Eliminar</button></td>' +
+          '</tr>'
+        )).join('') +
+        '</tbody></table></div>';
+
+      Array.from(consolidatedEliminations.querySelectorAll('[data-elimination-id]')).forEach((button) => {
+        button.addEventListener('click', async () => {
+          const id = button.getAttribute('data-elimination-id');
+          const confirmed = window.confirm('Vas a eliminar esta eliminación interna. ¿Continuar?');
+          if (!confirmed) return;
+          try {
+            await api(`/api/consolidation-eliminations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            await loadConsolidatedData().catch(() => {});
+            setGlobalMessage('Eliminación interna borrada correctamente.');
+          } catch (error) {
+            setGlobalMessage(error.message, true);
+          }
+        });
+      });
+    }
+  }
+
+  renderEliminationSelectors();
+}
+
+async function loadConsolidatedData() {
+  const selectedCompanyIds = getSelectedConsolidatedCompanyIds();
+  const groupId = consolidatedGroupSelect?.value || '';
+  const includeBudget = !consolidatedMode || consolidatedMode.value !== 'real';
+  const view = consolidatedView?.value || 'gerencial';
+
+  if (!groupId && !selectedCompanyIds.length) {
+    renderConsolidated(null);
+    if (consolidatedSummary) {
+      consolidatedSummary.innerHTML = '<p class="muted">Selecciona empresas o un grupo para consolidar.</p>';
+    }
+    return;
+  }
+
+  const params = new URLSearchParams({
+    view,
+    includeBudget: String(includeBudget),
+  });
+
+  if (groupId) {
+    params.set('groupId', groupId);
+  }
+  if (selectedCompanyIds.length) {
+    params.set('companyIds', selectedCompanyIds.join(','));
+  }
+
+  try {
+    const ytd = consolidatedPeriodMode?.value === 'ytd';
+    const path = ytd ? `/api/consolidated/ytd/${state.month}?${params.toString()}` : `/api/consolidated/${state.month}?${params.toString()}`;
+    const payload = await api(path);
+    renderConsolidated(payload);
+  } catch (error) {
+    renderConsolidated(null);
+    if (consolidatedSummary) {
+      consolidatedSummary.innerHTML = '<p class="muted">' + escapeHtml(error.message) + '</p>';
+    }
+  }
+}
+
 async function loadBudgetOnly() {
   const payload = await api(companyQuery(`/api/budget/${state.month}`));
   state.monthStatus = payload.monthStatus || state.monthStatus || null;
@@ -1222,6 +1651,11 @@ async function loadMonthData() {
     await loadTrend();
     await loadSprint2Panels().catch(() => {});
     await loadActionsOverview().catch(() => {});
+    if (state.activeView === 'acumulado') {
+      await loadAccumulatedData().catch(() => {});
+    } else if (state.activeView === 'consolidado') {
+      await loadConsolidatedData().catch(() => {});
+    }
     const activeCompany = getActiveCompany();
     setGlobalMessage(`Mes ${state.month} listo para ${activeCompany?.name || 'empresa activa'}.`);
   } catch (error) {
@@ -1519,7 +1953,137 @@ monthInput.addEventListener('change', () => {
   updateActivePeriodHints();
   updateBudgetTemplateLink();
   updateProcessButtonsState();
+  if (state.activeView === 'consolidado') {
+    loadConsolidatedData().catch(() => {});
+  }
 });
+
+if (accumulatedMode) {
+  accumulatedMode.addEventListener('change', async () => {
+    if (state.activeView === 'acumulado') {
+      await loadAccumulatedData().catch(() => {});
+    }
+  });
+}
+
+if (consolidatedMode) {
+  consolidatedMode.addEventListener('change', async () => {
+    if (state.activeView === 'consolidado') {
+      await loadConsolidatedData().catch(() => {});
+    }
+  });
+}
+
+if (consolidatedView) {
+  consolidatedView.addEventListener('change', async () => {
+    if (state.activeView === 'consolidado') {
+      await loadConsolidatedData().catch(() => {});
+    }
+  });
+}
+
+if (consolidatedPeriodMode) {
+  consolidatedPeriodMode.addEventListener('change', async () => {
+    if (state.activeView === 'consolidado') {
+      await loadConsolidatedData().catch(() => {});
+    }
+  });
+}
+
+if (consolidatedGroupSelect) {
+  consolidatedGroupSelect.addEventListener('change', async () => {
+    applyGroupSelection(consolidatedGroupSelect.value);
+    if (state.activeView === 'consolidado') {
+      await loadConsolidatedData().catch(() => {});
+    }
+  });
+}
+
+if (btnLoadConsolidated) {
+  btnLoadConsolidated.addEventListener('click', async () => {
+    await loadConsolidatedData().catch(() => {});
+  });
+}
+
+if (btnSaveCompanyGroup) {
+  btnSaveCompanyGroup.addEventListener('click', async () => {
+    try {
+      const payload = await api('/api/company-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: consolidatedGroupSelect?.value || undefined,
+          name: consolidatedGroupName?.value || '',
+          companyIds: getSelectedConsolidatedCompanyIds(),
+        }),
+      });
+      state.companyGroups = payload.groups || [];
+      renderCompanyGroups();
+      setGlobalMessage('Grupo empresarial guardado correctamente.');
+    } catch (error) {
+      setGlobalMessage(error.message, true);
+    }
+  });
+}
+
+if (btnDeleteCompanyGroup) {
+  btnDeleteCompanyGroup.addEventListener('click', async () => {
+    const groupId = consolidatedGroupSelect?.value || '';
+    if (!groupId) {
+      setGlobalMessage('Selecciona un grupo guardado para eliminarlo.', true);
+      return;
+    }
+
+    const confirmed = window.confirm('Vas a eliminar el grupo empresarial seleccionado. ¿Continuar?');
+    if (!confirmed) return;
+
+    try {
+      const payload = await api(`/api/company-groups/${encodeURIComponent(groupId)}`, {
+        method: 'DELETE',
+      });
+      state.companyGroups = payload.groups || [];
+      renderCompanyGroups();
+      consolidatedGroupSelect.value = '';
+      if (consolidatedGroupName) consolidatedGroupName.value = '';
+      renderConsolidatedCompanySelector();
+      setGlobalMessage('Grupo empresarial eliminado correctamente.');
+    } catch (error) {
+      setGlobalMessage(error.message, true);
+    }
+  });
+}
+
+if (btnSaveElimination) {
+  btnSaveElimination.addEventListener('click', async () => {
+    const selectedCompanyIds = getSelectedConsolidatedCompanyIds();
+    const groupId = consolidatedGroupSelect?.value || '';
+
+    try {
+      await api('/api/consolidation-eliminations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: state.month,
+          groupId: groupId || undefined,
+          companyIds: groupId ? [] : selectedCompanyIds,
+          sourceCompanyId: eliminationSourceCompany?.value || '',
+          targetCompanyId: eliminationTargetCompany?.value || '',
+          lineKey: eliminationLineKey?.value || '',
+          eliminationType: eliminationType?.value || 'otra_eliminacion',
+          value: Number(eliminationValue?.value || 0),
+          description: eliminationDescription?.value || '',
+        }),
+      });
+
+      if (eliminationValue) eliminationValue.value = '';
+      if (eliminationDescription) eliminationDescription.value = '';
+      await loadConsolidatedData().catch(() => {});
+      setGlobalMessage('Eliminación interna guardada correctamente.');
+    } catch (error) {
+      setGlobalMessage(error.message, true);
+    }
+  });
+}
 
 function initializeWorkspaceShell() {
   if (state.workspaceBooted) {
@@ -1527,6 +2091,11 @@ function initializeWorkspaceShell() {
   }
 
   bindNavigation();
+  if (topbarCompanySelect) {
+    topbarCompanySelect.addEventListener('change', async () => {
+      await applyActiveCompanyChange(topbarCompanySelect.value);
+    });
+  }
   const initialView = window.location.hash.replace('#', '').trim();
   if (viewTitles[initialView]) {
     state.activeView = initialView;
@@ -1539,6 +2108,7 @@ async function bootWorkspace() {
   initializeWorkspaceShell();
   state.meta = await api('/api/meta');
   await loadCompanies(false);
+  await loadCompanyGroups().catch(() => { state.companyGroups = []; renderCompanyGroups(); });
   monthInput.value = resolveInitialMonth();
   state.month = selectedMonth();
   updateActivePeriodHints();
@@ -2192,9 +2762,122 @@ if (loginForm) {
           password: loginPassword?.value || '',
         }),
       });
+      if (payload.mfaRequired && payload.mfaChallengeId) {
+        pendingMfaChallengeId = payload.mfaChallengeId;
+        authLoginStep = 'mfa';
+        setAuthMessage(payload.message || 'Ingresa el código MFA.');
+        setAuthMode();
+        if (loginMfaCodeInput) {
+          loginMfaCodeInput.focus();
+        }
+        return;
+      }
       await handleAuthenticatedEntry(payload, payload.message || 'Sesión iniciada correctamente.');
     } catch (error) {
       setAuthMessage(error.message || 'No fue posible iniciar sesión.', true);
+    }
+  });
+}
+
+if (loginMfaForm) {
+  loginMfaForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    setAuthMessage('Validando código MFA...');
+    try {
+      const payload = await requestJson('/api/auth/mfa/verify-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mfaChallengeId: pendingMfaChallengeId,
+          code: loginMfaCodeInput?.value || '',
+        }),
+      });
+      pendingMfaChallengeId = '';
+      authLoginStep = 'password';
+      await handleAuthenticatedEntry(payload, payload.message || 'Sesión iniciada correctamente.');
+    } catch (error) {
+      setAuthMessage(error.message || 'Código MFA inválido.', true);
+    }
+  });
+}
+
+if (btnLoginMfaCancel) {
+  btnLoginMfaCancel.addEventListener('click', () => {
+    pendingMfaChallengeId = '';
+    authLoginStep = 'password';
+    if (loginMfaForm) loginMfaForm.reset();
+    setAuthMessage('Ingresa con tu cuenta de administrador para usar la aplicación.');
+    setAuthMode();
+  });
+}
+
+if (btnMfaBegin) {
+  btnMfaBegin.addEventListener('click', async () => {
+    setMfaSettingsMessage('Generando secreto...');
+    try {
+      const data = await api('/api/auth/mfa/begin-setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (mfaSecretDisplay) mfaSecretDisplay.textContent = data.secret ? 'Secreto (base32): ' + data.secret : '';
+      if (mfaOtpauthLink && data.otpauthUrl) {
+        mfaOtpauthLink.href = data.otpauthUrl;
+        if (mfaOtpauthWrap) mfaOtpauthWrap.classList.remove('hidden');
+      }
+      setMfaSettingsMessage(data.message || 'Ingresa el código de tu app para confirmar.');
+    } catch (error) {
+      setMfaSettingsMessage(error.message || 'No fue posible iniciar MFA.', true);
+    }
+  });
+}
+
+if (btnMfaCancelSetup) {
+  btnMfaCancelSetup.addEventListener('click', async () => {
+    try {
+      await api('/api/auth/mfa/cancel-setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (mfaSecretDisplay) mfaSecretDisplay.textContent = '';
+      if (mfaOtpauthWrap) mfaOtpauthWrap.classList.add('hidden');
+      setMfaSettingsMessage('Borrador MFA cancelado.');
+    } catch (error) {
+      setMfaSettingsMessage(error.message || 'No fue posible cancelar.', true);
+    }
+  });
+}
+
+if (btnMfaComplete) {
+  btnMfaComplete.addEventListener('click', async () => {
+    setMfaSettingsMessage('Verificando...');
+    try {
+      await api('/api/auth/mfa/complete-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: mfaSetupCodeInput?.value || '' }),
+      });
+      if (mfaSetupCodeInput) mfaSetupCodeInput.value = '';
+      if (mfaSecretDisplay) mfaSecretDisplay.textContent = '';
+      setMfaSettingsMessage('MFA activado. Vuelve a iniciar sesión si lo requieres.');
+      await loadAuthSession().catch(() => {});
+    } catch (error) {
+      setMfaSettingsMessage(error.message || 'No fue posible activar MFA.', true);
+    }
+  });
+}
+
+if (btnMfaDisable) {
+  btnMfaDisable.addEventListener('click', async () => {
+    setMfaSettingsMessage('Desactivando...');
+    try {
+      await api('/api/auth/mfa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: mfaDisablePasswordInput?.value || '',
+          code: mfaDisableCodeInput?.value || '',
+        }),
+      });
+      if (mfaDisablePasswordInput) mfaDisablePasswordInput.value = '';
+      if (mfaDisableCodeInput) mfaDisableCodeInput.value = '';
+      setMfaSettingsMessage('MFA desactivado.');
+      await loadAuthSession().catch(() => {});
+    } catch (error) {
+      setMfaSettingsMessage(error.message || 'No fue posible desactivar MFA.', true);
     }
   });
 }

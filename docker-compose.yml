@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:-}
+      LOG_HTTP: ${LOG_HTTP:-true}
+    volumes:
+      - pgcontrol-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  pgcontrol-data:

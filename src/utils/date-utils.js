@@ -24,6 +24,18 @@ function getTodayLocalDateKey(now = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+/** Meses calendario desde enero del año del corte hasta `cutoffMonth` (inclusive). */
+function monthsInYearUpTo(cutoffMonth) {
+  const normalized = ensureMonth(cutoffMonth);
+  const year = Number(normalized.slice(0, 4));
+  const end = Number(normalized.slice(5, 7));
+  const out = [];
+  for (let m = 1; m <= end; m += 1) {
+    out.push(`${year}-${String(m).padStart(2, '0')}`);
+  }
+  return out;
+}
+
 function addDaysToDateKey(dateKey, days) {
   const [year, month, day] = String(dateKey || '').split('-').map(Number);
   const next = new Date(year, (month || 1) - 1, day || 1);
@@ -37,4 +49,5 @@ module.exports = {
   getPreviousMonth,
   getTodayLocalDateKey,
   addDaysToDateKey,
+  monthsInYearUpTo,
 };

@@ -1,7 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 const { buildDefaultLineSettingsMap, normalizeLineSettings } = require('./line-settings-service');
+const { normalizeUserRole } = require('./auth-service');
 
+/**
+ * Persistencia en JSON: esquema y migraciones
+ *
+ * - readDb() siempre devuelve datos pasados por ensureStructure().
+ * - migrateLegacyDb(): convierte bases antiguas (p. ej. sin companies/dataByCompany) al
+ *   shape actual; añade aquí pasos cuando existan archivos en producción con un formato viejo.
+ * - ensureStructure(): normaliza arrays/objetos faltantes y defaults por empresa; incrementa
+ *   compatibilidad sin subir meta.version obligatoriamente.
+ * - writeDb() fija meta.version (p. ej. 6) y updatedAt; si cambias el modelo de forma incompatible,
+ *   sube la versión, documenta el cambio y extiende migrateLegacyDb o ensureStructure según
+ *   haga falta reescribir datos existentes.
+ */
 const DB_PATH = path.join(__dirname, '..', '..', 'data', 'db.json');
 
 function createCompany(name = 'Empresa principal') {
@@ -30,10 +43,12 @@ function defaultDb() {
   const company = createCompany('Empresa principal');
   return {
     meta: {
-      version: 4,
+      version: 6,
       updatedAt: new Date().toISOString(),
     },
     companies: [company],
+    companyGroups: [],
+    consolidationEliminations: [],
     auditLogsGlobal: [],
     auth: {
       users: [],
@@ -62,10 +77,12 @@ function migrateLegacyDb(parsed) {
 
   return {
     meta: {
-      version: 4,
+      version: 6,
       updatedAt: new Date().toISOString(),
     },
     companies: [company],
+    companyGroups: [],
+    consolidationEliminations: [],
     auditLogsGlobal: [],
     auth: {
       users: [],
@@ -95,6 +112,43 @@ function ensureStructure(db) {
     next.auditLogsGlobal = [];
   }
 
+  if (!Array.isArray(next.companyGroups)) {
+    next.companyGroups = [];
+  }
+
+  if (!Array.isArray(next.consolidationEliminations)) {
+    next.consolidationEliminations = [];
+  }
+
+  next.companyGroups = next.companyGroups
+    .filter((group) => group && typeof group === 'object')
+    .map((group) => ({
+      id: String(group.id || `grp-${Math.random().toString(36).slice(2, 10)}`),
+      name: String(group.name || 'Grupo empresarial').trim() || 'Grupo empresarial',
+      companyIds: Array.isArray(group.companyIds) ? Array.from(new Set(group.companyIds.map((item) => String(item || '').trim()).filter(Boolean))) : [],
+      createdAt: group.createdAt || new Date().toISOString(),
+      updatedAt: group.updatedAt || group.createdAt || new Date().toISOString(),
+    }));
+
+  next.consolidationEliminations = next.consolidationEliminations
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      id: String(item.id || `elim-${Math.random().toString(36).slice(2, 10)}`),
+      scopeType: item.scopeType === 'group' ? 'group' : 'adhoc',
+      scopeKey: String(item.scopeKey || '').trim(),
+      groupId: String(item.groupId || '').trim() || null,
+      companyIds: Array.isArray(item.companyIds) ? Array.from(new Set(item.companyIds.map((v) => String(v || '').trim()).filter(Boolean))) : [],
+      month: String(item.month || '').trim(),
+      sourceCompanyId: String(item.sourceCompanyId || '').trim() || null,
+      targetCompanyId: String(item.targetCompanyId || '').trim() || null,
+      lineKey: String(item.lineKey || '').trim(),
+      description: String(item.description || '').trim(),
+      value: Number(item.value || 0),
+      eliminationType: String(item.eliminationType || 'otra_eliminacion').trim() || 'otra_eliminacion',
+      createdAt: item.createdAt || new Date().toISOString(),
+      updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+    }));
+
   if (!next.auth || typeof next.auth !== 'object') {
     next.auth = { users: [], sessions: [] };
   }
@@ -106,6 +160,22 @@ function ensureStructure(db) {
   if (!Array.isArray(next.auth.sessions)) {
     next.auth.sessions = [];
   }
+
+  next.auth.users.forEach((user) => {
+    if (!user || typeof user !== 'object') {
+      return;
+    }
+    user.role = normalizeUserRole(user.role);
+    if (user.mfaEnabled === undefined) {
+      user.mfaEnabled = false;
+    }
+    if (user.mfaSecret === undefined) {
+      user.mfaSecret = null;
+    }
+    if (user.mfaTempSecret === undefined) {
+      user.mfaTempSecret = null;
+    }
+  });
 
   next.companies.forEach((company) => {
     if (!next.dataByCompany[company.id]) {
@@ -174,7 +244,7 @@ function writeDb(nextDb) {
     ...normalized,
     meta: {
       ...(normalized.meta || {}),
-      version: 4,
+      version: 6,
       updatedAt: new Date().toISOString(),
     },
   };

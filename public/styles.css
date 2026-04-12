@@ -209,6 +209,28 @@ th { background: #f2f6fb; position: sticky; top: 0; }
   margin-bottom: 12px;
 }
 
+.company-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.company-selector-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfe;
+  color: var(--text);
+}
+
+.company-selector-item input[type="checkbox"] {
+  min-height: auto;
+}
+
 .kpi {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -795,6 +817,21 @@ body {
 
 .context-card strong {
   font-size: 18px;
+}
+
+.context-card-company .topbar-company-select {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  color: inherit;
+  cursor: pointer;
 }
 
 .context-inline {

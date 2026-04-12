@@ -23,6 +23,15 @@
           <button class="btn auth-submit" type="submit">Ingresar</button>
         </form>
 
+        <form id="login-mfa-form" class="stack-sm hidden">
+          <p class="muted">Introduce el código de 6 dígitos de tu aplicación de autenticación.</p>
+          <label>Código MFA
+            <input id="login-mfa-code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="12" required />
+          </label>
+          <button class="btn auth-submit" type="submit">Confirmar acceso</button>
+          <button class="btn btn-secondary" type="button" id="btn-login-mfa-cancel">Volver al inicio de sesión</button>
+        </form>
+
         <form id="setup-form" class="stack-sm hidden">
           <label>Token de configuración
             <input id="setup-token" type="password" autocomplete="off" />
@@ -58,6 +67,8 @@
           <button class="nav-link" data-nav-view="ejecucion" type="button">Ejecución</button>
           <button class="nav-link" data-nav-view="presupuesto" type="button">Presupuesto</button>
           <button class="nav-link" data-nav-view="analisis" type="button">Análisis mensual</button>
+          <button class="nav-link" data-nav-view="acumulado" type="button">Acumulado</button>
+          <button class="nav-link" data-nav-view="consolidado" type="button">Consolidado</button>
           <button class="nav-link" data-nav-view="historico" type="button">Histórico</button>
           <button class="nav-link" data-nav-view="acciones" type="button">Acciones</button>
           <button class="nav-link" data-nav-view="bitacora" type="button">Bitácora</button>
@@ -73,9 +84,9 @@
           </div>
 
           <div class="topbar-context">
-            <article class="context-card">
+            <article class="context-card context-card-company">
               <small>Empresa activa</small>
-              <strong id="topbar-company-name">Sin empresa activa</strong>
+              <select id="topbar-company-select" class="topbar-company-select" aria-label="Empresa activa"></select>
             </article>
 
             <article class="context-card context-card-month">
@@ -312,6 +323,210 @@
             </section>
           </section>
 
+          <section class="view-panel" data-app-view="acumulado">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Acumulado año corrido</h2>
+                  <p class="muted">Vista YTD desde enero hasta el mes de corte para la empresa activa, con modelo contable y gerencial.</p>
+                </div>
+                <div class="actions-inline wrap-actions">
+                  <label>Modo
+                    <select id="accumulated-mode">
+                      <option value="real_vs_budget">Real vs presupuesto</option>
+                      <option value="real">Solo real</option>
+                      <option value="budget">Solo presupuesto</option>
+                    </select>
+                  </label>
+                  <a id="accumulated-export-link" class="btn disabled" href="#">Exportar acumulado Excel</a>
+                </div>
+              </div>
+
+              <div id="accumulated-summary" class="kpi-grid"></div>
+
+              <article class="insight-card">
+                <div class="insight-card-head">
+                  <div>
+                    <p class="insight-eyebrow">Cierre YTD</p>
+                    <h3>Resumen ejecutivo acumulado</h3>
+                  </div>
+                </div>
+                <div id="accumulated-executive"></div>
+              </article>
+
+              <div class="analysis-grid-2">
+                <article class="insight-card">
+                  <div class="insight-card-head">
+                    <div>
+                      <p class="insight-eyebrow">Modelo contable</p>
+                      <h3>P&amp;G acumulado estándar</h3>
+                    </div>
+                  </div>
+                  <div id="accumulated-standard"></div>
+                </article>
+                <article class="insight-card">
+                  <div class="insight-card-head">
+                    <div>
+                      <p class="insight-eyebrow">Presupuesto y seguimiento</p>
+                      <h3>Comparativo acumulado</h3>
+                    </div>
+                  </div>
+                  <div id="accumulated-comparison"></div>
+                </article>
+              </div>
+
+              <article class="insight-card insight-card-table">
+                <div class="insight-card-head">
+                  <div>
+                    <p class="insight-eyebrow">Apertura por subrubros</p>
+                    <h3>P&amp;G acumulado detallado</h3>
+                  </div>
+                </div>
+                <div id="accumulated-detailed"></div>
+              </article>
+
+              <details class="insight-card insight-card-details" open>
+                <summary>
+                  <span>
+                    <p class="insight-eyebrow">Trazabilidad</p>
+                    <h3>Mapeo y notas acumuladas</h3>
+                  </span>
+                </summary>
+                <div id="accumulated-notes"></div>
+                <div id="accumulated-mapping"></div>
+              </details>
+            </section>
+          </section>
+
+          <section class="view-panel" data-app-view="consolidado">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Consolidado</h2>
+                  <p class="muted">Por <strong>mes único</strong> o <strong>año corrido (YTD)</strong> hasta el mes global de corte. Misma selección de grupo o empresas. Las eliminaciones internas se guardan por mes; en YTD se <strong>suman</strong> todas las del período (enero–corte) con el mismo alcance.</p>
+                </div>
+                <a id="consolidated-export-link" class="btn disabled" href="#">Exportar consolidado Excel</a>
+              </div>
+
+              <div class="grid-2">
+                <div class="stack-sm">
+                  <label>Periodo
+                    <select id="consolidated-period-mode">
+                      <option value="monthly">Mes único (corte mensual)</option>
+                      <option value="ytd">Acumulado YTD (enero → mes de corte)</option>
+                    </select>
+                  </label>
+                  <label>Modo
+                    <select id="consolidated-mode">
+                      <option value="real_vs_budget">Real vs presupuesto</option>
+                      <option value="real">Solo real</option>
+                      <option value="budget">Solo presupuesto</option>
+                    </select>
+                  </label>
+                  <label>Vista
+                    <select id="consolidated-view">
+                      <option value="gerencial">Gerencial</option>
+                      <option value="contable">Contable</option>
+                    </select>
+                  </label>
+                  <label>Grupo guardado
+                    <select id="consolidated-group-select">
+                      <option value="">Selección manual</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="stack-sm">
+                  <label>Nombre del grupo
+                    <input id="consolidated-group-name" type="text" placeholder="Ej: Grupo Tu Piel" />
+                  </label>
+                  <div class="actions-inline wrap-actions">
+                    <button id="btn-save-company-group" class="btn" type="button">Guardar grupo</button>
+                    <button id="btn-delete-company-group" class="btn btn-danger" type="button">Eliminar grupo</button>
+                    <button id="btn-load-consolidated" class="btn btn-secondary" type="button">Actualizar consolidado</button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="consolidated-company-selector" class="company-selector-grid"></div>
+              <div id="consolidated-summary" class="kpi-grid"></div>
+
+              <article class="insight-card insight-card-table">
+                <div class="insight-card-head">
+                  <div>
+                    <p class="insight-eyebrow">Resumen por empresa</p>
+                    <h3>P&amp;G estándar consolidado</h3>
+                  </div>
+                </div>
+                <div id="consolidated-standard"></div>
+              </article>
+
+              <article class="insight-card insight-card-table">
+                <div class="insight-card-head">
+                  <div>
+                    <p class="insight-eyebrow">Ajuste por eliminaciones</p>
+                    <h3>Consolidado ajustado final</h3>
+                  </div>
+                </div>
+                <div id="consolidated-adjusted"></div>
+              </article>
+
+              <article class="insight-card insight-card-table">
+                <div class="insight-card-head">
+                  <div>
+                    <p class="insight-eyebrow">Apertura por subrubros</p>
+                    <h3>P&amp;G detallado consolidado</h3>
+                  </div>
+                </div>
+                <div id="consolidated-detailed"></div>
+              </article>
+
+              <details class="insight-card insight-card-details" open>
+                <summary>
+                  <span>
+                    <p class="insight-eyebrow">Soporte</p>
+                    <h3>Comparativo y notas</h3>
+                  </span>
+                </summary>
+                <div class="grid-2">
+                  <div class="stack-sm">
+                    <h4>Registrar eliminación interna</h4>
+                    <label>Empresa origen
+                      <select id="elimination-source-company"></select>
+                    </label>
+                    <label>Empresa destino
+                      <select id="elimination-target-company"></select>
+                    </label>
+                    <label>Línea P&amp;G afectada
+                      <select id="elimination-line-key"></select>
+                    </label>
+                    <label>Tipo de eliminación
+                      <select id="elimination-type">
+                        <option value="ingreso_intercompania">Ingreso intercompañía</option>
+                        <option value="costo_intercompania">Costo intercompañía</option>
+                        <option value="gasto_intercompania">Gasto intercompañía</option>
+                        <option value="otra_eliminacion">Otra eliminación</option>
+                      </select>
+                    </label>
+                    <label>Valor
+                      <input id="elimination-value" type="number" min="0" step="0.01" />
+                    </label>
+                    <label>Descripción
+                      <input id="elimination-description" type="text" placeholder="Ej: Ingreso entre empresas hermanas" />
+                    </label>
+                    <button id="btn-save-elimination" class="btn" type="button">Guardar eliminación</button>
+                  </div>
+                  <div>
+                    <h4>Eliminaciones registradas</h4>
+                    <div id="consolidated-eliminations"></div>
+                  </div>
+                </div>
+                <div id="consolidated-comparison"></div>
+                <div id="consolidated-notes"></div>
+              </details>
+            </section>
+          </section>
+
           <section class="view-panel" data-app-view="historico">
             <section class="panel">
               <h2>Histórico mensual</h2>
@@ -404,6 +619,31 @@
               </form>
             </section>
 
+            <section class="panel" id="mfa-settings-panel">
+              <h2>Autenticación en dos pasos (TOTP)</h2>
+              <p class="muted" id="mfa-status-text">Estado MFA se muestra al cargar la sesión.</p>
+              <div class="actions-inline">
+                <button type="button" class="btn" id="btn-mfa-begin">Iniciar configuración MFA</button>
+                <button type="button" class="btn btn-secondary" id="btn-mfa-cancel-setup">Cancelar borrador MFA</button>
+              </div>
+              <p class="muted hidden" id="mfa-otpauth-wrap"><a id="mfa-otpauth-link" href="#" target="_blank" rel="noopener">Abrir enlace otpauth</a></p>
+              <pre id="mfa-secret-display" class="muted" style="white-space:pre-wrap;word-break:break-all;"></pre>
+              <label>Código de verificación
+                <input id="mfa-setup-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" />
+              </label>
+              <button type="button" class="btn" id="btn-mfa-complete">Activar MFA</button>
+              <hr />
+              <h3>Desactivar MFA</h3>
+              <label>Contraseña actual
+                <input id="mfa-disable-password" type="password" autocomplete="current-password" />
+              </label>
+              <label>Código MFA
+                <input id="mfa-disable-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" />
+              </label>
+              <button type="button" class="btn btn-secondary" id="btn-mfa-disable">Desactivar MFA</button>
+              <p id="mfa-settings-message" class="muted"></p>
+            </section>
+
             <section class="panel">
               <h2>Seguridad de acceso</h2>
               <form id="change-password-form" class="stack-sm auth-settings-form">
@@ -425,7 +665,7 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260409contai1"></script>
+    <script type="module" src="/app.js?v=20260411mod1"></script>
   </body>
 </html>
 

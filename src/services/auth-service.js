@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { authenticator } = require('otplib');
 
 const SCRYPT_COST = 16384;
 const SCRYPT_BLOCK_SIZE = 8;
@@ -7,6 +8,13 @@ const SCRYPT_KEY_LENGTH = 64;
 const SCRYPT_MAXMEM = 32 * 1024 * 1024;
 const SESSION_TTL_HOURS = Math.max(1, Number(process.env.AUTH_SESSION_TTL_HOURS || 12));
 const SESSION_TTL_MS = SESSION_TTL_HOURS * 60 * 60 * 1000;
+const SESSION_SLIDE_MS = Math.max(1, Number(process.env.AUTH_SESSION_SLIDE_MINUTES || 5)) * 60 * 1000;
+
+const ROLE_RANK = {
+  viewer: 1,
+  editor: 2,
+  admin: 3,
+};
 const DEFAULT_ADMIN_EMAIL = 'admin@pgcontrol.local';
 const DEFAULT_ADMIN_PASSWORD = 'PgcAdmin_2026!Cambiar';
 const DEFAULT_ADMIN_NAME = 'Administrador';
@@ -21,6 +29,20 @@ function ensureAuthState(db) {
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeUserRole(role) {
+  const r = String(role || '').trim().toLowerCase();
+  if (r === 'viewer' || r === 'editor' || r === 'admin') {
+    return r;
+  }
+  return 'admin';
+}
+
+function roleMeetsMinimum(userRole, minimumRole) {
+  const u = ROLE_RANK[normalizeUserRole(userRole)] || 0;
+  const m = ROLE_RANK[normalizeUserRole(minimumRole)] || 0;
+  return u >= m;
 }
 
 function nowIso() {
@@ -85,7 +107,8 @@ function sanitizeUser(user) {
     id: user.id,
     email: user.email,
     displayName: user.displayName || user.email,
-    role: user.role || 'admin',
+    role: normalizeUserRole(user.role),
+    mfaEnabled: Boolean(user.mfaEnabled),
     createdAt: user.createdAt || null,
     lastLoginAt: user.lastLoginAt || null,
     updatedAt: user.updatedAt || null,
@@ -107,8 +130,11 @@ function createUserRecord({ email, password, displayName, role = 'admin' }) {
     id: `usr-${crypto.randomUUID()}`,
     email: normalizedEmail,
     displayName: String(displayName || '').trim() || 'Administrador',
-    role,
+    role: normalizeUserRole(role),
     passwordHash: hashPassword(password),
+    mfaEnabled: false,
+    mfaSecret: null,
+    mfaTempSecret: null,
     createdAt: timestamp,
     updatedAt: timestamp,
     lastLoginAt: null,
@@ -255,6 +281,90 @@ function registerSuccessfulLogin(db, userId) {
   return user;
 }
 
+function maybeExtendSessionSliding(session) {
+  if (!session) {
+    return false;
+  }
+  const now = Date.now();
+  const last = new Date(session.lastSeenAt || session.createdAt || 0).getTime();
+  if (!Number.isFinite(last)) {
+    return false;
+  }
+  if (now - last < SESSION_SLIDE_MS) {
+    return false;
+  }
+  session.lastSeenAt = new Date(now).toISOString();
+  session.expiresAt = new Date(now + SESSION_TTL_MS).toISOString();
+  session.updatedAt = session.lastSeenAt;
+  return true;
+}
+
+function verifyTotpCode(secret, token) {
+  const cleaned = String(token || '').replace(/\s/g, '');
+  if (!cleaned || !secret) {
+    return false;
+  }
+  return authenticator.verify({ token: cleaned, secret: String(secret) });
+}
+
+function startMfaEnrollment(db, userId) {
+  const auth = ensureAuthState(db);
+  const user = auth.users.find((item) => item.id === userId);
+  if (!user) {
+    throw new Error('Usuario no encontrado.');
+  }
+  const secret = authenticator.generateSecret();
+  user.mfaTempSecret = secret;
+  user.updatedAt = nowIso();
+  const label = encodeURIComponent(user.email || 'pg-control');
+  const issuer = encodeURIComponent('Control P&G');
+  const otpauthUrl = `otpauth://totp/${issuer}:${label}?secret=${secret}&issuer=${issuer}`;
+  return { secret, otpauthUrl };
+}
+
+function confirmMfaEnrollment(db, userId, token) {
+  const auth = ensureAuthState(db);
+  const user = auth.users.find((item) => item.id === userId);
+  if (!user || !user.mfaTempSecret) {
+    throw new Error('No hay configuracion MFA pendiente. Reinicia el asistente.');
+  }
+  if (!verifyTotpCode(user.mfaTempSecret, token)) {
+    throw new Error('Codigo de verificacion incorrecto.');
+  }
+  user.mfaSecret = user.mfaTempSecret;
+  user.mfaTempSecret = null;
+  user.mfaEnabled = true;
+  user.updatedAt = nowIso();
+  return user;
+}
+
+function cancelMfaEnrollment(db, userId) {
+  const auth = ensureAuthState(db);
+  const user = auth.users.find((item) => item.id === userId);
+  if (!user) {
+    throw new Error('Usuario no encontrado.');
+  }
+  user.mfaTempSecret = null;
+  user.updatedAt = nowIso();
+  return user;
+}
+
+function disableMfaWithCode(db, userId, token) {
+  const auth = ensureAuthState(db);
+  const user = auth.users.find((item) => item.id === userId);
+  if (!user || !user.mfaEnabled) {
+    throw new Error('MFA no esta activo.');
+  }
+  if (!verifyTotpCode(user.mfaSecret, token)) {
+    throw new Error('Codigo de verificacion incorrecto.');
+  }
+  user.mfaEnabled = false;
+  user.mfaSecret = null;
+  user.mfaTempSecret = null;
+  user.updatedAt = nowIso();
+  return user;
+}
+
 function bootstrapInitialUser(db, env = process.env) {
   const auth = ensureAuthState(db);
   if (auth.users.length > 0) {
@@ -276,8 +386,12 @@ function bootstrapInitialUser(db, env = process.env) {
 module.exports = {
   SESSION_TTL_HOURS,
   SESSION_TTL_MS,
+  SESSION_SLIDE_MS,
+  ROLE_RANK,
   ensureAuthState,
   normalizeEmail,
+  normalizeUserRole,
+  roleMeetsMinimum,
   hashPassword,
   verifyPassword,
   validatePasswordStrength,
@@ -292,6 +406,12 @@ module.exports = {
   revokeSessionByToken,
   revokeUserSessions,
   registerSuccessfulLogin,
+  maybeExtendSessionSliding,
+  verifyTotpCode,
+  startMfaEnrollment,
+  confirmMfaEnrollment,
+  cancelMfaEnrollment,
+  disableMfaWithCode,
   bootstrapInitialUser,
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_PASSWORD,

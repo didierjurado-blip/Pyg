@@ -111,22 +111,58 @@ docker compose build --no-cache
 docker compose up -d
 ```
 
+El `docker-compose.yml` por defecto solo levanta la app (persistencia `data/db.json` en el volumen). Para PostgreSQL y auditoria de seguridad en tabla `security_audit`, usa el stack extendido:
+
+```powershell
+docker compose -f docker-compose.corporate.yml up -d
+docker compose -f docker-compose.corporate.yml run --rm app npm run migrate
+```
+
+Define `DATABASE_URL` si usas Postgres fuera de ese compose (por ejemplo en `.env`).
+
+## Respaldo de la base JSON
+Copia versionada de `data/db.json` en `data/backups/`:
+
+```powershell
+npm run backup:db
+```
+
+## Pruebas automatizadas y CI
+```powershell
+npm test
+```
+
+En GitHub Actions el workflow `.github/workflows/ci.yml` ejecuta `npm ci` y `npm test`.
+
+## API y observabilidad
+- Contrato parcial en [openapi.json](openapi.json); se expone en `GET /api/openapi.json`.
+- Liveness: `GET /api/health`. Readiness (lectura de `db.json` y Postgres si `DATABASE_URL` esta definido): `GET /api/ready`.
+- Logs HTTP en JSON por peticion (desactivar con `LOG_HTTP=false`).
+- Procesamiento asincrono de ejecucion: `POST /api/execution/process-async` devuelve `202` y `jobId`; estado en `GET /api/jobs/:jobId`.
+
 ## Seguridad y alcance actual
 - La autenticacion usa contrasenas hasheadas con `scrypt`.
 - Las sesiones se guardan en `data/db.json`.
 - La cookie es `HttpOnly` y `SameSite=Lax`.
 - Hay proteccion CSRF para operaciones mutables.
 - Hay rate limit basico en login y setup inicial.
+- Roles: `admin` (estructura y borrados criticos), `editor` (cargas y ajustes operativos), `viewer` (solo lectura). Los usuarios existentes se normalizan a `admin` si no tenian rol. Para cambiar rol: `node scripts/set-user-role.js <email> <admin|editor|viewer>`.
+- MFA TOTP opcional (configuracion en la vista Configuracion). Tras activarlo, el login exige segundo paso.
+- Renovacion deslizante de sesion: cada varios minutos de actividad se extiende la expiracion (variable `AUTH_SESSION_SLIDE_MINUTES`, por defecto 5).
+- Con `DATABASE_URL` y migraciones aplicadas, eventos sensibles de autenticacion se registran en PostgreSQL (`security_audit`).
 
 ## Limitaciones actuales
 - Es una app administrativa pequena, no un IAM corporativo.
 - No hay recuperacion de contrasena por correo.
-- No hay MFA.
-- No hay roles finos.
-- La persistencia sigue en JSON local.
+- No hay SSO corporativo ni MFA WebAuthn.
+- La persistencia operativa principal sigue en JSON local (Postgres complementa auditoria de seguridad, no reemplaza aun todo el modelo).
+
+## Documentacion de desarrollo
+- [Eje de prioridad sugerido](docs/eje-prioridad-desarrollo.md) para planificar siguientes iteraciones.
+- [Rutas API: publicas, sesion y CSRF](docs/api-auth-routes.md).
+- [Arquitectura acumulado YTD y consolidado](docs/ARCHITECTURE-accumulado-consolidado.md).
 
 ## Proximos pasos recomendados
-- Migrar usuarios y sesiones a PostgreSQL.
-- Agregar auditoria de login/logout.
-- Agregar expiracion deslizante de sesion.
-- Incorporar roles y permisos por modulo.
+- Migrar datos operativos (meses, cargas) a PostgreSQL con transacciones.
+- Auditoria completa de acciones de negocio en base relacional.
+- SSO (OIDC/SAML) y politicas de contrasena avanzadas.
